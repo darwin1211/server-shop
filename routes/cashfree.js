@@ -1,61 +1,48 @@
-const express = require('express');
+// server-shop/routes/cashfree.js
+
+const express = require("express");
 const router = express.Router();
-const axios = require('axios');
-const Order = require('../models/orders'); // Adjust path if needed
-require('dotenv').config();
+const axios = require("axios");
 
-// STEP 1: Create payment order with Cashfree
-router.post('/token', async (req, res) => {
-    const { userId, products, amount, email, phone } = req.body;
+require("dotenv").config();
 
-    const orderId = `ORD_${Date.now()}`;
+router.get("/", (req, res) => {
+  res.send("✅ Cashfree route working. Use POST to generate token.");
+});
 
-    try {
-        const headers = {
-            accept: 'application/json',
-            'content-type': 'application/json',
-            'x-client-id': process.env.CASHFREE_APP_ID,
-            'x-client-secret': process.env.CASHFREE_SECRET_KEY
-        };
+router.post("/", async (req, res) => {
+  const { orderId, orderAmount, customerName, customerEmail, customerPhone } = req.body;
 
-        const data = {
-            order_id: orderId,
-            order_amount: amount,
-            order_currency: "INR",
-            customer_details: {
-                customer_id: userId,
-                customer_email: email,
-                customer_phone: phone
-            }
-        };
+  const headers = {
+    "x-client-id": process.env.CASHFREE_CLIENT_ID,
+    "x-client-secret": process.env.CASHFREE_CLIENT_SECRET,
+    "x-api-version": "2022-09-01",
+    "Content-Type": "application/json",
+  };
 
-        const response = await axios.post(
-            "https://sandbox.cashfree.com/pg/orders",
-            data,
-            { headers }
-        );
+  const data = {
+    order_id: orderId,
+    order_amount: orderAmount,
+    order_currency: "INR",
+    customer_details: {
+      customer_id: orderId,
+      customer_name: customerName,
+      customer_email: customerEmail,
+      customer_phone: customerPhone,
+    },
+  };
 
-        // Save to MongoDB
-        const newOrder = new Order({
-            user: userId,
-            products,
-            amount,
-            status: "PENDING",
-            orderId
-        });
-
-        await newOrder.save();
-
-        res.json({
-            success: true,
-            tokenData: response.data,
-            orderId
-        });
-
-    } catch (err) {
-        console.error(err.response?.data || err.message);
-        res.status(500).json({ success: false, error: "Cashfree order creation failed" });
-    }
+  try {
+    const response = await axios.post(
+      "https://sandbox.cashfree.com/pg/orders",
+      data,
+      { headers }
+    );
+    res.status(200).json(response.data);
+  } catch (err) {
+    console.error("Cashfree error:", err?.response?.data || err.message);
+    res.status(500).json({ error: err?.response?.data || "Payment creation failed" });
+  }
 });
 
 module.exports = router;
