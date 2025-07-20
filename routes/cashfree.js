@@ -1,47 +1,45 @@
-// server-shop/routes/cashfree.js
+// routes/cashfree.js
 
 const express = require("express");
 const router = express.Router();
 const axios = require("axios");
 
-require("dotenv").config();
+// Create Cashfree payment session
+router.post("/cashfree-token", async (req, res) => {
+  const { amount, email, phone, name, userId } = req.body;
 
-router.get("/", (req, res) => {
-  res.send("✅ Cashfree route working. Use POST to generate token.");
-});
-
-router.post("/", async (req, res) => {
-  const { orderId, orderAmount, customerName, customerEmail, customerPhone } = req.body;
-
-  const headers = {
-    "x-client-id": process.env.CASHFREE_CLIENT_ID,
-    "x-client-secret": process.env.CASHFREE_CLIENT_SECRET,
-    "x-api-version": "2022-09-01",
-    "Content-Type": "application/json",
-  };
-
-  const data = {
+  const orderId = `order_${Date.now()}`;
+  const payload = {
     order_id: orderId,
-    order_amount: orderAmount,
+    order_amount: amount,
     order_currency: "INR",
     customer_details: {
-      customer_id: orderId,
-      customer_name: customerName,
-      customer_email: customerEmail,
-      customer_phone: customerPhone,
+      customer_id: userId,
+      customer_email: email,
+      customer_phone: phone,
+      customer_name: name,
     },
   };
 
   try {
     const response = await axios.post(
       "https://sandbox.cashfree.com/pg/orders",
-      data,
-      { headers }
+      payload,
+      {
+        headers: {
+          accept: "application/json",
+          "x-api-version": "2022-09-01",
+          "content-type": "application/json",
+          "x-client-id": process.env.CASHFREE_APP_ID,
+          "x-client-secret": process.env.CASHFREE_SECRET_KEY,
+        },
+      }
     );
-    res.status(200).json(response.data);
-  } catch (err) {
-    console.error("Cashfree error:", err?.response?.data || err.message);
-    res.status(500).json({ error: err?.response?.data || "Payment creation failed" });
+
+    res.json({ payment_session_id: response.data.payment_session_id });
+  } catch (error) {
+    console.error("Cashfree error:", error.response?.data || error.message);
+    res.status(500).json({ error: "Failed to generate payment session" });
   }
 });
 
