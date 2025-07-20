@@ -3,7 +3,7 @@ const app = express();
 const bodyParser = require('body-parser');
 const mongoose = require('mongoose');
 const cors = require('cors');
-require('dotenv').config(); // load environment variables
+require('dotenv').config(); // Load environment variables
 
 // Middleware
 app.use(cors());
@@ -52,9 +52,9 @@ app.use("/api/homeSideBanners", homeSideBannerSchema);
 app.use("/api/homeBottomBanners", homeBottomBannerSchema);
 
 // ✅ Register Cashfree payment route
-app.use("/api/cashfree-token", cashfreeRoutes);
+app.use("/api", cashfreeRoutes); // 👈 This makes endpoint: POST /api/cashfree-token
 
-// MongoDB Connection and Start Server
+// MongoDB Connection and Server Start
 mongoose.connect(process.env.CONNECTION_STRING, {
     useNewUrlParser: true,
     useUnifiedTopology: true
