@@ -1,27 +1,14 @@
+// backend/routes/cashfree.js
 const express = require("express");
 const router = express.Router();
 const axios = require("axios");
 
-// @route   POST /api/cashfree-token
-// @desc    Generate Cashfree payment session ID
-// @access  Public
 router.post("/", async (req, res) => {
   const { amount, userId, email, phone, name } = req.body;
 
   try {
-    // Log to verify keys are loaded
-    if (!process.env.CASHFREE_APP_ID || !process.env.CASHFREE_SECRET_KEY) {
-      return res.status(500).json({ error: "Cashfree keys not configured" });
-    }
-
-    // Encode credentials in Base64
-    const authHeader = Buffer.from(
-      `${process.env.CASHFREE_APP_ID}:${process.env.CASHFREE_SECRET_KEY}`
-    ).toString("base64");
-
-    // Create order using Cashfree API
     const response = await axios.post(
-      "https://api.cashfree.com/pg/orders", // ✅ PRODUCTION URL
+      "https://api.cashfree.com/pg/orders",
       {
         order_amount: amount,
         order_currency: "INR",
@@ -34,25 +21,18 @@ router.post("/", async (req, res) => {
       },
       {
         headers: {
-          Authorization: `Basic ${authHeader}`,
-          "Content-Type": "application/json",
+          "x-client-id": process.env.CASHFREE_APP_ID,
+          "x-client-secret": process.env.CASHFREE_SECRET_KEY,
           "x-api-version": "2022-09-01",
+          "Content-Type": "application/json",
         },
       }
     );
 
-    // Return session ID to frontend
-    return res.status(200).json({
-      payment_session_id: response.data.payment_session_id,
-    });
-
+    res.status(200).json({ payment_session_id: response.data.payment_session_id });
   } catch (err) {
     console.error("Cashfree Error:", err.response?.data || err.message);
-
-    const errorMessage =
-      err.response?.data?.message || "Failed to generate payment session";
-
-    return res.status(500).json({ error: errorMessage });
+    res.status(500).json({ error: "Failed to generate payment session" });
   }
 });
 
