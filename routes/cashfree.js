@@ -11,7 +11,7 @@ router.post("/", async (req, res) => {
     ).toString("base64");
 
     const response = await axios.post(
-      "https://sandbox.cashfree.com/pg/orders",
+      "https://api.cashfree.com/pg/orders",
       {
         order_amount: amount,
         order_currency: "INR",
