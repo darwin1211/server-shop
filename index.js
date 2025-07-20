@@ -5,15 +5,13 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 require('dotenv/config');
 
+// Middleware
 app.use(cors());
-app.options('*', cors())
-
-//middleware
+app.options('*', cors());
 app.use(bodyParser.json());
 app.use(express.json());
 
-
-//Routes
+// Routes
 const userRoutes = require('./routes/user.js');
 const categoryRoutes = require('./routes/categories');
 const productRoutes = require('./routes/products');
@@ -31,38 +29,42 @@ const bannersSchema = require('./routes/banners.js');
 const homeSideBannerSchema = require('./routes/homeSideBanner.js');
 const homeBottomBannerSchema = require('./routes/homeBottomBanner.js');
 
-app.use("/api/user",userRoutes);
-app.use("/uploads",express.static("uploads"));
-app.use(`/api/category`, categoryRoutes);
-app.use(`/api/products`, productRoutes);
-app.use(`/api/imageUpload`, imageUploadRoutes);
-app.use(`/api/productWeight`, productWeightRoutes);
-app.use(`/api/productRAMS`, productRAMSRoutes);
-app.use(`/api/productSIZE`, productSIZESRoutes);
-app.use(`/api/productReviews`, productReviews);
-app.use(`/api/cart`, cartSchema);
-app.use(`/api/my-list`, myListSchema);
-app.use(`/api/orders`, ordersSchema);
-app.use(`/api/homeBanner`, homeBannerSchema);
-app.use(`/api/search`, searchRoutes);
-app.use(`/api/banners`, bannersSchema);
-app.use(`/api/homeSideBanners`, homeSideBannerSchema);
-app.use(`/api/homeBottomBanners`, homeBottomBannerSchema);
+// ✅ Cashfree route added here
+const cashfreeRoutes = require('./routes/cashfree.js');
 
+// Route Middleware
+app.use("/api/user", userRoutes);
+app.use("/uploads", express.static("uploads"));
+app.use("/api/category", categoryRoutes);
+app.use("/api/products", productRoutes);
+app.use("/api/imageUpload", imageUploadRoutes);
+app.use("/api/productWeight", productWeightRoutes);
+app.use("/api/productRAMS", productRAMSRoutes);
+app.use("/api/productSIZE", productSIZESRoutes);
+app.use("/api/productReviews", productReviews);
+app.use("/api/cart", cartSchema);
+app.use("/api/my-list", myListSchema);
+app.use("/api/orders", ordersSchema);
+app.use("/api/homeBanner", homeBannerSchema);
+app.use("/api/search", searchRoutes);
+app.use("/api/banners", bannersSchema);
+app.use("/api/homeSideBanners", homeSideBannerSchema);
+app.use("/api/homeBottomBanners", homeBottomBannerSchema);
 
+// ✅ Register Cashfree route
+app.use("/api/cashfree-token", cashfreeRoutes);
 
-//Database
+// MongoDB Connection & Server Start
 mongoose.connect(process.env.CONNECTION_STRING, {
     useNewUrlParser: true,
     useUnifiedTopology: true
 })
-    .then(() => {
-        console.log('Database Connection is ready...');
-        //Server
-        app.listen(process.env.PORT, () => {
-            console.log(`server is running http://localhost:${process.env.PORT}`);
-        })
-    })
-    .catch((err) => {
-        console.log(err);
-    })
+.then(() => {
+    console.log('Database Connection is ready...');
+    app.listen(process.env.PORT, () => {
+        console.log(`Server is running at http://localhost:${process.env.PORT}`);
+    });
+})
+.catch((err) => {
+    console.log(err);
+});
