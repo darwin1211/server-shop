@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const axios = require('axios');
-const Order = require('../models/order'); // Adjust path if needed
+const Order = require('../models/orders'); // Adjust path if needed
 require('dotenv').config();
 
 // STEP 1: Create payment order with Cashfree
