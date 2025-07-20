@@ -5,7 +5,7 @@ const router = express.Router();
 const axios = require("axios");
 
 // POST /api/cashfree-token
-router.post("/cashfree-token", async (req, res) => {
+router.post("/", async (req, res) => {
   try {
     const { amount, userId, email, phone, name } = req.body;
     const orderId = "ORDER_" + Date.now();
