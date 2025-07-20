@@ -3,7 +3,7 @@ const app = express();
 const bodyParser = require('body-parser');
 const mongoose = require('mongoose');
 const cors = require('cors');
-require('dotenv/config');
+require('dotenv').config(); // Make sure .env is loaded
 
 // Middleware
 app.use(cors());
@@ -29,7 +29,7 @@ const bannersSchema = require('./routes/banners.js');
 const homeSideBannerSchema = require('./routes/homeSideBanner.js');
 const homeBottomBannerSchema = require('./routes/homeBottomBanner.js');
 
-// ✅ Cashfree route added here
+// ✅ Correct Cashfree route mounting
 const cashfreeRoutes = require('./routes/cashfree.js');
 
 // Route Middleware
@@ -51,8 +51,8 @@ app.use("/api/banners", bannersSchema);
 app.use("/api/homeSideBanners", homeSideBannerSchema);
 app.use("/api/homeBottomBanners", homeBottomBannerSchema);
 
-// ✅ Register Cashfree route
-app.use("/api/cashfree-token", cashfreeRoutes);
+// ✅ Updated path: now accessible via /api/cashfree/token
+app.use("/api/cashfree", cashfreeRoutes);
 
 // MongoDB Connection & Server Start
 mongoose.connect(process.env.CONNECTION_STRING, {
@@ -60,11 +60,13 @@ mongoose.connect(process.env.CONNECTION_STRING, {
     useUnifiedTopology: true
 })
 .then(() => {
-    console.log('Database Connection is ready...');
-    app.listen(process.env.PORT, () => {
-        console.log(`Server is running at http://localhost:${process.env.PORT}`);
+    console.log('✅ Database Connection is ready...');
+    
+    const PORT = process.env.PORT || 5000;
+    app.listen(PORT, () => {
+        console.log(`🚀 Server is running at http://localhost:${PORT}`);
     });
 })
 .catch((err) => {
-    console.log(err);
+    console.error('❌ MongoDB connection error:', err);
 });
