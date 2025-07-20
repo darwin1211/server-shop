@@ -18,7 +18,7 @@ router.post("/cashfree-token", async (req, res) => {
         customer_name: name,
       },
       order_meta: {
-        return_url: `https://vapemaster.netlify.app}/payment-success?order_id={order_id}`,
+        return_url: `https://vapemaster.netlify.app/payment-success?order_id={order_id}`,
       }
     };
 
