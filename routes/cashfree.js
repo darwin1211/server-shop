@@ -1,64 +1,50 @@
-// routes/cashfree.js
-
-const express = require("express");
+const express = require('express');
+const axios = require('axios');
 const router = express.Router();
-const axios = require("axios");
 
-// Health‑check endpoint (GET /api/cashfree-token)
-router.get("/", (req, res) => {
-  return res.status(200).json({ msg: "Cashfree route is alive" });
-});
+const CASHFREE_APP_ID = process.env.CASHFREE_APP_ID;
+const CASHFREE_SECRET_KEY = process.env.CASHFREE_SECRET_KEY;
+const CASHFREE_ENV = process.env.CASHFREE_ENV || "TEST"; // Use "PROD" in production
 
-// POST /api/cashfree-token
-router.post("/", async (req, res) => {
+const BASE_URL =
+  CASHFREE_ENV === "PROD"
+    ? "https://api.cashfree.com/pg"
+    : "https://sandbox.cashfree.com/pg";
+
+router.post('/cashfree-token', async (req, res) => {
   try {
-    const { amount, userId, email, phone, name } = req.body;
-    const orderId = "ORDER_" + Date.now();
+    const { orderId, orderAmount, customerName, customerEmail, customerPhone } = req.body;
 
-    // Build payload for Cashfree Orders API
-    const payload = {
-      order_id: orderId,
-      order_amount: amount,
-      order_currency: "INR",
-      customer_details: {
-        customer_id: userId || "guest",
-        customer_email: email,
-        customer_phone: phone,
-        customer_name: name,
+    const tokenRes = await axios.post(
+      `${BASE_URL}/orders`,
+      {
+        order_id: orderId,
+        order_amount: orderAmount,
+        order_currency: "INR",
+        customer_details: {
+          customer_id: customerEmail,
+          customer_name: customerName,
+          customer_email: customerEmail,
+          customer_phone: customerPhone
+        }
       },
-      order_meta: {
-        return_url:`https://vapemaster.netlify.app/payment-success?order_id=order_id`,
-      },
-    };
-
-    // Call Cashfree to create an order & session
-    const response = await axios.post(
-      "https://api.cashfree.com/pg/orders",
-      payload,
       {
         headers: {
-          "Content-Type": "application/json",
-          "x-client-id": process.env.CASHFREE_APP_ID,
-          "x-client-secret": process.env.CASHFREE_SECRET_KEY,
+          accept: "application/json",
           "x-api-version": "2022-09-01",
-        },
+          "content-type": "application/json",
+          "x-client-id": CASHFREE_APP_ID,
+          "x-client-secret": CASHFREE_SECRET_KEY
+        }
       }
     );
 
-    // Extract payment_session_id
-    const sessionId = response.data.payment_session_id;
-    if (!sessionId) {
-      throw new Error("No payment_session_id in Cashfree response");
-    }
+    const { payment_session_id } = tokenRes.data;
 
-    // Send it back to client
-    return res.status(200).json({ payment_session_id: sessionId });
-  } catch (error) {
-    console.error("❌ Cashfree Error:", error.response?.data || error.message);
-    return res.status(500).json({
-      error: "Cashfree token generation failed",
-      details: error.response?.data || error.message,
-    });
+    res.json({ paymentSessionId: payment_session_id });
+  } catch (err) {
+    console.error("Cashfree error:", err?.response?.data || err.message);
+    res.status(500).json({ error: "Failed to create Cashfree session" });
   }
 });
 
