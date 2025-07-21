@@ -1,4 +1,3 @@
-// server.js
 require('dotenv').config();
 const express = require('express');
 const bodyParser = require('body-parser');
@@ -7,8 +6,15 @@ const cors = require('cors');
 
 const app = express();
 
+// ─── PROPER CORS SETUP ────────────────────────────────────────────────────────
+app.use(cors({
+  origin: 'https://vapemaster.netlify.app', // ✅ your frontend domain
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+}));
+
 // ─── MIDDLEWARE ───────────────────────────────────────────────────────────────
-app.use(cors());
 app.use(bodyParser.json());
 app.use(express.json());
 app.use('/uploads', express.static('uploads'));
@@ -32,7 +38,7 @@ const homeSideBannerRoutes   = require('./routes/homeSideBanner.js');
 const homeBottomBannerRoutes = require('./routes/homeBottomBanner.js');
 const cashfreeRoutes         = require('./routes/cashfree.js');
 
-// Mount all API endpoints
+// ─── API ROUTES ───────────────────────────────────────────────────────────────
 app.use('/api/user', userRoutes);
 app.use('/api/category', categoryRoutes);
 app.use('/api/products', productRoutes);
