@@ -13,7 +13,11 @@
   "dependencies": {
     "bcrypt": "^5.1.1",
     "body-parser": "^1.20.2",
+<<<<<<< HEAD
     "cashfree-pg": "^5.0.8",
+=======
+    "cors": "^2.8.5",
+>>>>>>> cbab385bba3c2d7ef874a9ffb9668bbe17d916c8
     "cloudinary": "^2.2.0",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
