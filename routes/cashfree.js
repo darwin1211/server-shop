@@ -13,9 +13,11 @@ router.get("/", (req, res) => {
 router.post("/", async (req, res) => {
   try {
     const { amount, userId, email, phone, name } = req.body;
+
+    // ✅ Generate unique order ID
     const orderId = "ORDER_" + Date.now();
 
-    // Build payload for Cashfree Orders API
+    // ✅ Build Cashfree order payload
     const payload = {
       order_id: orderId,
       order_amount: amount,
@@ -27,11 +29,12 @@ router.post("/", async (req, res) => {
         customer_name: name,
       },
       order_meta: {
-        return_url:`https://vapemaster.netlify.app/payment-success?order_id=order_id`,
+        // ✅ Return the actual order ID in return_url
+        return_url: `https://vapemaster.netlify.app/payment-success?order_id=${orderId}`,
       },
     };
 
-    // Call Cashfree to create an order & session
+    // ✅ Send request to Cashfree Orders API
     const response = await axios.post(
       "https://api.cashfree.com/pg/orders",
       payload,
@@ -45,14 +48,15 @@ router.post("/", async (req, res) => {
       }
     );
 
-    // Extract payment_session_id
     const sessionId = response.data.payment_session_id;
     if (!sessionId) {
-      throw new Error("No payment_session_id in Cashfree response");
+      throw new Error("No payment_session_id returned from Cashfree");
     }
 
-    // Send it back to client
-    return res.status(200).json({ payment_session_id: sessionId });
+    return res.status(200).json({
+      payment_session_id: sessionId,
+      order_id: orderId, // Optional: send this back too
+    });
   } catch (error) {
     console.error("❌ Cashfree Error:", error.response?.data || error.message);
     return res.status(500).json({

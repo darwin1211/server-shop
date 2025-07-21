@@ -1,37 +1,15 @@
-// index.js (Backend Entry Point)
-
 require("dotenv").config();
 const express = require("express");
-const cors = require("cors");
 const bodyParser = require("body-parser");
 const mongoose = require("mongoose");
 
 const app = express();
-
-// ─── CORS SETUP ────────────────────────────────────────────────────────────────
-// Enable preflight for all routes
-app.options("*", cors());
-
-// Whitelist your front-end origins
-app.use(
-  cors({
-    origin: [
-      "https://vapemaster.netlify.app",
-      "http://localhost:3000",         // if testing locally
-      "http://localhost:3006",         // your dev client port
-    ],
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true,
-  })
-);
 
 // ─── REQUEST PARSING ────────────────────────────────────────────────────────────
 app.use(bodyParser.json());
 app.use(express.json());
 
 // ─── ROUTES ────────────────────────────────────────────────────────────────────
-// Your application’s other routes
 const userRoutes = require("./routes/user.js");
 const categoryRoutes = require("./routes/categories");
 const productRoutes = require("./routes/products");
@@ -52,7 +30,7 @@ const homeBottomBannerRoutes = require("./routes/homeBottomBanner.js");
 // Cashfree payment route
 const cashfreeRoutes = require("./routes/cashfree.js");
 
-// Mount application routes
+// Mount routes
 app.use("/api/user", userRoutes);
 app.use("/uploads", express.static("uploads"));
 app.use("/api/category", categoryRoutes);
@@ -70,8 +48,6 @@ app.use("/api/search", searchRoutes);
 app.use("/api/banners", bannersRoutes);
 app.use("/api/homeSideBanners", homeSideBannerRoutes);
 app.use("/api/homeBottomBanners", homeBottomBannerRoutes);
-
-// Mount Cashfree route at /api/cashfree-token
 app.use("/api/cashfree-token", cashfreeRoutes);
 
 // ─── DATABASE & SERVER START ──────────────────────────────────────────────────
