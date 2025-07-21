@@ -1,18 +1,37 @@
-// index.js
+// index.js (Backend Entry Point)
+
 require("dotenv").config();
 const express = require("express");
+const cors = require("cors");
 const bodyParser = require("body-parser");
 const mongoose = require("mongoose");
-const cors = require("cors");
 
 const app = express();
 
-// Middleware
-app.use(cors());
+// ─── CORS SETUP ────────────────────────────────────────────────────────────────
+// Enable preflight for all routes
+app.options("*", cors());
+
+// Whitelist your front-end origins
+app.use(
+  cors({
+    origin: [
+      "https://vapemaster.netlify.app",
+      "http://localhost:3000",         // if testing locally
+      "http://localhost:3006",         // your dev client port
+    ],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
+  })
+);
+
+// ─── REQUEST PARSING ────────────────────────────────────────────────────────────
 app.use(bodyParser.json());
 app.use(express.json());
 
-// Your other route imports
+// ─── ROUTES ────────────────────────────────────────────────────────────────────
+// Your application’s other routes
 const userRoutes = require("./routes/user.js");
 const categoryRoutes = require("./routes/categories");
 const productRoutes = require("./routes/products");
@@ -30,10 +49,10 @@ const bannersRoutes = require("./routes/banners.js");
 const homeSideBannerRoutes = require("./routes/homeSideBanner.js");
 const homeBottomBannerRoutes = require("./routes/homeBottomBanner.js");
 
-// Cashfree route
+// Cashfree payment route
 const cashfreeRoutes = require("./routes/cashfree.js");
 
-// Mount your routes
+// Mount application routes
 app.use("/api/user", userRoutes);
 app.use("/uploads", express.static("uploads"));
 app.use("/api/category", categoryRoutes);
@@ -52,11 +71,10 @@ app.use("/api/banners", bannersRoutes);
 app.use("/api/homeSideBanners", homeSideBannerRoutes);
 app.use("/api/homeBottomBanners", homeBottomBannerRoutes);
 
-// ─── Cashfree ────────────────────────────────────────────────────────────
-// This mounts POST /api/cashfree-token to the router in routes/cashfree.js
+// Mount Cashfree route at /api/cashfree-token
 app.use("/api/cashfree-token", cashfreeRoutes);
 
-// MongoDB connection & start server
+// ─── DATABASE & SERVER START ──────────────────────────────────────────────────
 mongoose
   .connect(process.env.CONNECTION_STRING, {
     useNewUrlParser: true,
