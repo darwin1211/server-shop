@@ -1,92 +1,70 @@
-// index.js (Backend Entry Point)
+// index.js
+const express = require('express');
+const cors = require('cors');
+const dotenv = require('dotenv');
+const cashfreeRoutes = require('./routes/cashfree');
 
-require("dotenv").config();
-const express = require("express");
-const cors = require("cors");
-const bodyParser = require("body-parser");
-const mongoose = require("mongoose");
+dotenv.config();
 
 const app = express();
 
-// ─── CORS SETUP ────────────────────────────────────────────────────────────────
-// Enable preflight for all routes
-app.options("*", cors());
-
-// Whitelist your front-end origins
-app.use(
-  cors({
-    origin: [
-      "https://vapemaster.netlify.app",
-      "http://localhost:3000",         // if testing locally
-      "http://localhost:3006",         // your dev client port
-    ],
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true,
-  })
-);
-
-// ─── REQUEST PARSING ────────────────────────────────────────────────────────────
-app.use(bodyParser.json());
+app.use(cors());
 app.use(express.json());
 
-// ─── ROUTES ────────────────────────────────────────────────────────────────────
-// Your application’s other routes
-const userRoutes = require("./routes/user.js");
-const categoryRoutes = require("./routes/categories");
-const productRoutes = require("./routes/products");
-const imageUploadRoutes = require("./helper/imageUpload.js");
-const productWeightRoutes = require("./routes/productWeight.js");
-const productRAMSRoutes = require("./routes/productRAMS.js");
-const productSIZESRoutes = require("./routes/productSize.js");
-const productReviews = require("./routes/productReviews.js");
-const cartRoutes = require("./routes/cart.js");
-const myListRoutes = require("./routes/myList.js");
-const ordersRoutes = require("./routes/orders.js");
-const homeBannerRoutes = require("./routes/homeBanner.js");
-const searchRoutes = require("./routes/search.js");
-const bannersRoutes = require("./routes/banners.js");
-const homeSideBannerRoutes = require("./routes/homeSideBanner.js");
-const homeBottomBannerRoutes = require("./routes/homeBottomBanner.js");
+app.use('/api/cashfree-token', cashfreeRoutes);
 
-// Cashfree payment route
-const cashfreeRoutes = require("./routes/cashfree.js");
+app.get('/', (req, res) => {
+  res.send('API is running...');
+});
 
-// Mount application routes
-app.use("/api/user", userRoutes);
-app.use("/uploads", express.static("uploads"));
-app.use("/api/category", categoryRoutes);
-app.use("/api/products", productRoutes);
-app.use("/api/imageUpload", imageUploadRoutes);
-app.use("/api/productWeight", productWeightRoutes);
-app.use("/api/productRAMS", productRAMSRoutes);
-app.use("/api/productSIZE", productSIZESRoutes);
-app.use("/api/productReviews", productReviews);
-app.use("/api/cart", cartRoutes);
-app.use("/api/my-list", myListRoutes);
-app.use("/api/orders", ordersRoutes);
-app.use("/api/homeBanner", homeBannerRoutes);
-app.use("/api/search", searchRoutes);
-app.use("/api/banners", bannersRoutes);
-app.use("/api/homeSideBanners", homeSideBannerRoutes);
-app.use("/api/homeBottomBanners", homeBottomBannerRoutes);
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log(`Server started on port ${PORT}`);
+});
 
-// Mount Cashfree route at /api/cashfree-token
-app.use("/api/cashfree-token", cashfreeRoutes);
+// routes/cashfree.js
+const express = require('express');
+const axios = require('axios');
+const router = express.Router();
+const dotenv = require('dotenv');
 
-// ─── DATABASE & SERVER START ──────────────────────────────────────────────────
-mongoose
-  .connect(process.env.CONNECTION_STRING, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  })
-  .then(() => {
-    console.log("✅ Database connected successfully");
-    const PORT = process.env.PORT || 8000;
-    app.listen(PORT, () => {
-      console.log(`🚀 Server is running at http://localhost:${PORT}`);
-    });
-  })
-  .catch((err) => {
-    console.error("❌ Database connection failed:", err.message);
-  });
+dotenv.config();
+
+router.post('/', async (req, res) => {
+  try {
+    const { orderId, orderAmount, customerEmail, customerPhone } = req.body;
+
+    const response = await axios.post(
+      'https://api.cashfree.com/pg/orders',
+      {
+        order_id: orderId,
+        order_amount: orderAmount,
+        order_currency: 'INR',
+        customer_details: {
+          customer_id: customerEmail,
+          customer_email: customerEmail,
+          customer_phone: customerPhone,
+        },
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-version': '2022-09-01',
+          'x-client-id': process.env.CASHFREE_APP_ID,
+          'x-client-secret': process.env.CASHFREE_SECRET_KEY,
+        },
+      }
+    );
+
+    res.status(200).json(response.data);
+  } catch (error) {
+    console.error('Cashfree token error:', error.response?.data || error.message);
+    res.status(500).json({ error: 'Failed to generate Cashfree token' });
+  }
+});
+
+module.exports = router;
+
+// .env (not part of JS code but must be in project root)
+// CASHFREE_APP_ID=your_cashfree_app_id
+// CASHFREE_SECRET_KEY=your_cashfree_secret_key
