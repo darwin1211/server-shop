@@ -29,7 +29,7 @@ app.post('/api/cashfree-token', async (req, res) => {
         headers: {
           'Content-Type': 'application/json',
           'x-api-version': '2025-01-01',
-          'x-client-id': process.env.CASHFREE_CLIENT_ID,     // set in env
+          'x-client-id': process.env.CASHFREE_APP_ID,     // set in env
           'x-client-secret': process.env.CASHFREE_CLIENT_SECRET
         }
       }
