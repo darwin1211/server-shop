@@ -7,12 +7,15 @@ const cors = require('cors');
 const app = express();
 
 // ─── PROPER CORS SETUP ────────────────────────────────────────────────────────
-app.use(cors({
+const corsOptions = {
   origin: 'https://vapemaster.netlify.app', // ✅ your frontend domain
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true
-}));
+  credentials: true,
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // ✅ handle preflight requests
 
 // ─── MIDDLEWARE ───────────────────────────────────────────────────────────────
 app.use(bodyParser.json());
@@ -55,7 +58,7 @@ app.use('/api/search', searchRoutes);
 app.use('/api/banners', bannersRoutes);
 app.use('/api/homeSideBanners', homeSideBannerRoutes);
 app.use('/api/homeBottomBanners', homeBottomBannerRoutes);
-app.use('/api/cashfree-token', cashfreeRoutes);
+app.use('/api/cashfree-token', cashfreeRoutes); // ✅ Cashfree route
 
 // ─── DATABASE CONNECTION & SERVER START ───────────────────────────────────────
 mongoose
