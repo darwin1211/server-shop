@@ -3,7 +3,8 @@ const router = express.Router();
 const User = require("../models/user");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
-const sendEmailFun = require("../utils/sendEmail"); // adjust path if needed
+const sendEmail = require("../utils/emailService");
+
 
 // Generate OTP helper
 const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
