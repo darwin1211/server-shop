@@ -6,23 +6,33 @@ const cors = require('cors');
 
 const app = express();
 
-// ─── PROPER CORS SETUP ────────────────────────────────────────────────────────
+// ─── PROPER CORS SETUP FOR MULTIPLE ORIGINS ───
 const corsOptions = {
-  origin: 'https://vapemaster.netlify.app', // ✅ your frontend domain
+  origin: function (origin, callback) {
+    const allowedOrigins = [
+      'https://vapemaster.netlify.app',
+      'https://admin222.netlify.app',
+    ];
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
 };
 
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions)); // ✅ handle preflight requests
+app.options('*', cors(corsOptions)); // handle preflight requests
 
-// ─── MIDDLEWARE ───────────────────────────────────────────────────────────────
+// ─── MIDDLEWARE ───
 app.use(bodyParser.json());
 app.use(express.json());
 app.use('/uploads', express.static('uploads'));
 
-// ─── ROUTES ───────────────────────────────────────────────────────────────────
+// ─── ROUTES ───
 const userRoutes             = require('./routes/user.js');
 const categoryRoutes         = require('./routes/categories');
 const productRoutes          = require('./routes/products');
@@ -41,7 +51,7 @@ const homeSideBannerRoutes   = require('./routes/homeSideBanner.js');
 const homeBottomBannerRoutes = require('./routes/homeBottomBanner.js');
 const cashfreeRoutes         = require('./routes/cashfree.js');
 
-// ─── API ROUTES ───────────────────────────────────────────────────────────────
+// ─── API ROUTES ───
 app.use('/api/user', userRoutes);
 app.use('/api/category', categoryRoutes);
 app.use('/api/products', productRoutes);
@@ -58,9 +68,9 @@ app.use('/api/search', searchRoutes);
 app.use('/api/banners', bannersRoutes);
 app.use('/api/homeSideBanners', homeSideBannerRoutes);
 app.use('/api/homeBottomBanners', homeBottomBannerRoutes);
-app.use('/api/cashfree-token', cashfreeRoutes); // ✅ Cashfree route
+app.use('/api/cashfree-token', cashfreeRoutes);
 
-// ─── DATABASE CONNECTION & SERVER START ───────────────────────────────────────
+// ─── DATABASE CONNECTION & SERVER START ───
 mongoose
   .connect(process.env.CONNECTION_STRING, {
     useNewUrlParser: true,
