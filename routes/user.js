@@ -5,15 +5,23 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const sendEmail = require("../utils/emailService");
 
-
-// Generate OTP helper
+// Helper to generate 6-digit OTP
 const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
 
 // ===================
 // User Sign Up
 // ===================
 router.post("/signup", async (req, res) => {
+  console.log("📥 Incoming body at /signup:", req.body);
+
   const { username, email, password } = req.body;
+
+  if (!username || !email || !password) {
+    return res.status(400).json({
+      success: false,
+      message: "All fields (username, email, password) are required",
+    });
+  }
 
   try {
     const existingUser = await User.findOne({ email });
@@ -21,7 +29,7 @@ router.post("/signup", async (req, res) => {
     if (existingUser) {
       return res.status(400).json({
         success: false,
-        message: "User already exist with this email!",
+        message: "User already exists with this email!",
       });
     }
 
@@ -38,7 +46,7 @@ router.post("/signup", async (req, res) => {
     });
 
     await newUser.save();
-    await sendEmailFun(email, "OTP Verification", "", "Your OTP is: " + otp);
+    await sendEmail(email, "OTP Verification", "", `Your OTP is: ${otp}`);
 
     res.status(200).json({
       success: true,
@@ -47,7 +55,7 @@ router.post("/signup", async (req, res) => {
       userId: newUser._id,
     });
   } catch (err) {
-    console.error(err);
+    console.error("❌ Signup error:", err);
     res.status(500).json({
       success: false,
       message: "Server error during signup",
@@ -76,7 +84,7 @@ router.post("/verifyAccount/resendOtp", async (req, res) => {
     user.otpExpires = Date.now() + 600000; // 10 mins
     await user.save();
 
-    await sendEmailFun(email, "Resend OTP", "", "Your new OTP is: " + newOTP);
+    await sendEmail(email, "Resend OTP", "", `Your new OTP is: ${newOTP}`);
 
     res.status(200).json({
       success: true,
@@ -85,7 +93,7 @@ router.post("/verifyAccount/resendOtp", async (req, res) => {
       existingUserId: user._id,
     });
   } catch (err) {
-    console.error(err);
+    console.error("❌ Resend OTP error:", err);
     res.status(500).json({
       success: false,
       message: "Server error while resending OTP",
@@ -126,7 +134,7 @@ router.post("/verifyemail", async (req, res) => {
       message: "Account verified",
     });
   } catch (err) {
-    console.error(err);
+    console.error("❌ Verify OTP error:", err);
     res.status(500).json({
       success: false,
       message: "Server error during verification",
