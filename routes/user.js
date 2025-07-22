@@ -1,143 +1,141 @@
+// server-shop/routes/user.js
 const express = require("express");
-const router = express.Router();
-const User = require("../models/user");
-const bcrypt = require("bcrypt");
-const jwt = require("jsonwebtoken");
-const sendEmail = require("../utils/emailService");
+const router  = express.Router();
 
-// Helper to generate 6-digit OTP
+// point at your model’s lowercase filename
+const User    = require("../models/user");
+
+const bcrypt  = require("bcrypt");               // you have bcrypt in package.json
+const jwt     = require("jsonwebtoken");
+
+// fix path to your email util
+const { sendEmail } = require("../utils/emailService");
+
+// helper to make a 6‑digit OTP
 const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
 
-// ===================
-// User Sign Up
-// ===================
+// ─── SIGNUP ──────────────────────────────────────────────────
 router.post("/signup", async (req, res) => {
-  console.log("📥 Incoming body at /signup:", req.body);
-
-  const { username, email, password } = req.body;
-
-  if (!username || !email || !password) {
-    return res.status(400).json({
-      success: false,
-      message: "All fields (username, email, password) are required",
-    });
+  const { name, email, phone, password } = req.body;
+  if (!name || !email || !phone || !password) {
+    return res.status(400).json({ success:false, message:"All fields required" });
   }
 
   try {
-    const existingUser = await User.findOne({ email });
-
-    if (existingUser) {
+    if (await User.findOne({ email })) {
       return res.status(400).json({
         success: false,
-        message: "User already exists with this email!",
+        message: "User already exist with this email!"
       });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const otp = generateOTP();
+    const hashed = await bcrypt.hash(password, 10);
+    const otp    = generateOTP();
 
-    const newUser = new User({
-      username,
+    const user = new User({
+      name,
       email,
-      password: hashedPassword,
+      phone,
+      password: hashed,
       otp,
-      otpExpires: Date.now() + 600000, // 10 mins
-      isVerified: false,
+      otpExpires: Date.now() + 600000,
+      isVerified: false
     });
+    await user.save();
 
-    await newUser.save();
-    await sendEmail(email, "OTP Verification", "", `Your OTP is: ${otp}`);
+    await sendEmail(
+      email,
+      "OTP Verification",
+      "",
+      `<p>Your verification code is <strong>${otp}</strong></p>`
+    );
 
     res.status(200).json({
       success: true,
       message: "OTP sent",
-      otp,
-      userId: newUser._id,
+      otp,           // you can remove this in production
+      userId: user._id
     });
   } catch (err) {
-    console.error("❌ Signup error:", err);
+    console.error(err);
     res.status(500).json({
       success: false,
-      message: "Server error during signup",
+      message: "Server error during signup"
     });
   }
 });
 
-// ===================
-// Resend OTP
-// ===================
+// ─── RESEND OTP ───────────────────────────────────────────────
 router.post("/verifyAccount/resendOtp", async (req, res) => {
   const { email } = req.body;
+  if (!email) {
+    return res.status(400).json({ success:false, message:"Email required" });
+  }
 
   try {
     const user = await User.findOne({ email });
-
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
+      return res.status(404).json({ success:false, message:"User not found" });
     }
 
-    const newOTP = generateOTP();
-    user.otp = newOTP;
-    user.otpExpires = Date.now() + 600000; // 10 mins
+    const otp = generateOTP();
+    user.otp = otp;
+    user.otpExpires = Date.now() + 600000;
     await user.save();
 
-    await sendEmail(email, "Resend OTP", "", `Your new OTP is: ${newOTP}`);
+    await sendEmail(
+      email,
+      "Resend OTP",
+      "",
+      `<p>Your new OTP is <strong>${otp}</strong></p>`
+    );
 
     res.status(200).json({
       success: true,
       message: "OTP sent again",
-      otp: newOTP,
-      existingUserId: user._id,
+      otp,                // remove before production
+      userId: user._id
     });
   } catch (err) {
-    console.error("❌ Resend OTP error:", err);
+    console.error(err);
     res.status(500).json({
       success: false,
-      message: "Server error while resending OTP",
+      message: "Server error while resending OTP"
     });
   }
 });
 
-// ===================
-// Verify OTP
-// ===================
+// ─── VERIFY OTP ──────────────────────────────────────────────
 router.post("/verifyemail", async (req, res) => {
   const { userId, otp } = req.body;
+  if (!userId || !otp) {
+    return res.status(400).json({ success:false, message:"userId and otp required" });
+  }
 
   try {
     const user = await User.findById(userId);
-
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
+      return res.status(404).json({ success:false, message:"User not found" });
     }
 
     if (user.otp !== otp || Date.now() > user.otpExpires) {
       return res.status(400).json({
         success: false,
-        message: "Invalid OTP or OTP expired",
+        message: "Invalid OTP or OTP expired"
       });
     }
 
-    user.isVerified = true;
-    user.otp = null;
-    user.otpExpires = null;
+    user.isVerified  = true;
+    user.otp         = null;
+    user.otpExpires  = null;
     await user.save();
 
-    res.status(200).json({
-      success: true,
-      message: "Account verified",
-    });
+    res.status(200).json({ success:true, message:"Account verified" });
   } catch (err) {
-    console.error("❌ Verify OTP error:", err);
+    console.error(err);
     res.status(500).json({
       success: false,
-      message: "Server error during verification",
+      message: "Server error during verification"
     });
   }
 });
