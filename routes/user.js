@@ -156,27 +156,33 @@ router.post(`/verifyAccount/resendOtp`, async (req, res) => {
   const { email } = req.body;
 
   try {
-    // Generate verification code
     const verifyCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const existingUser = await User.findOne({ email });
 
-    // If the user exists but is not verified, update the existing user
-
-    const existingUser = await User.findOne({ email: email });
-
-    if (existingUser) {
-      return res.status(200).json({
-        success: true,
-        message: "OTP SEND",
-        otp: verifyCode,
-        existingUserId: existingUser._id,
-      });
+    if (!existingUser) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
     }
+
+    existingUser.otp = verifyCode;
+    existingUser.otpExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
+    await existingUser.save();
+
+    await sendEmailFun(email, "Resend OTP", "", "Your new OTP is " + verifyCode);
+
+    return res.status(200).json({
+      success: true,
+      message: "OTP resent",
+      otp: verifyCode, // You can remove this in production
+      existingUserId: existingUser._id,
+    });
   } catch (error) {
     console.log(error);
-    res.json({ status: "FAILED", msg: "something went wrong" });
-    return;
+    res.status(500).json({ success: false, msg: "something went wrong" });
   }
 });
+
 
 router.put(`/verifyAccount/emailVerify/:id`, async (req, res) => {
   const { email, otp } = req.body;
