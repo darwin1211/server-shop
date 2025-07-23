@@ -19,7 +19,7 @@ cloudinary.config({
   secure: true,
 });
 
-var imagesArr = [];
+let imagesArr = []; // Moved to local scope where needed to avoid concurrency issues
 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -27,16 +27,13 @@ const storage = multer.diskStorage({
   },
   filename: function (req, file, cb) {
     cb(null, `${Date.now()}_${file.originalname}`);
-    //imagesArr.push(`${Date.now()}_${file.originalname}`)
-    //console.log(file.originalname)
   },
 });
 
 const upload = multer({ storage: storage });
 
 router.post(`/upload`, upload.array("images"), async (req, res) => {
-  imagesArr = [];
-
+  let imagesArr = []; // Local scope
   try {
     for (let i = 0; i < req.files?.length; i++) {
       const options = {
@@ -49,6 +46,7 @@ router.post(`/upload`, upload.array("images"), async (req, res) => {
         req.files[i].path,
         options,
         function (error, result) {
+          if (error) throw error;
           imagesArr.push(result.secure_url);
           fs.unlinkSync(`uploads/${req.files[i].filename}`);
         }
@@ -60,28 +58,96 @@ router.post(`/upload`, upload.array("images"), async (req, res) => {
     });
 
     imagesUploaded = await imagesUploaded.save();
+    if (!imagesUploaded) {
+      return res.status(500).json({ message: 'Failed to save images', success: false });
+    }
 
     return res.status(200).json(imagesArr);
   } catch (error) {
-    console.log(error);
+    console.error('Error in /api/products/upload:', error.stack);
+    return res.status(500).json({ message: 'Server error', error: error.message, success: false });
   }
 });
 
 router.get(`/`, async (req, res) => {
-  const page = parseInt(req.query.page) || 1;
-  const perPage = parseInt(req.query.perPage);
-  const totalPosts = await Product.countDocuments();
-  const totalPages = Math.ceil(totalPosts / perPage);
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const perPage = parseInt(req.query.perPage);
+    const totalPosts = await Product.countDocuments();
+    const totalPages = Math.ceil(totalPosts / perPage);
 
-  if (page > totalPages) {
-    return res.status(404).json({ message: "Page not found" });
+    if (page > totalPages) {
+      return res.status(404).json({ message: "Page not found", success: false });
+    }
+
+    let productList = [];
+
+    if (req.query.page !== undefined && req.query.perPage !== undefined) {
+      if (req.query.location !== undefined) {
+        const productListArr = await Product.find()
+          .populate("category")
+          .skip((page - 1) * perPage)
+          .limit(perPage)
+          .exec();
+
+        for (let i = 0; i < productListArr.length; i++) {
+          for (let j = 0; j < productListArr[i].location.length; j++) {
+            if (productListArr[i].location[j].value === req.query.location) {
+              productList.push(productListArr[i]);
+            }
+          }
+        }
+      } else {
+        productList = await Product.find()
+          .populate("category")
+          .skip((page - 1) * perPage)
+          .limit(perPage)
+          .exec();
+      }
+    } else {
+      productList = await Product.find().populate("category");
+    }
+
+    return res.status(200).json({
+      products: productList,
+      totalPages: totalPages,
+      page: page,
+      success: true
+    });
+  } catch (error) {
+    console.error('Error in /api/products:', error.stack);
+    return res.status(500).json({ message: 'Server error', error: error.message, success: false });
   }
+});
 
-  let productList = [];
+router.get(`/catName`, async (req, res) => {
+  try {
+    let productList = [];
 
-  if (req.query.page !== undefined && req.query.perPage !== undefined) {
-    if (req.query.location !== undefined) {
-      const productListArr = await Product.find()
+    const page = parseInt(req.query.page) || 1;
+    const perPage = parseInt(req.query.perPage);
+    const totalPosts = await Product.countDocuments();
+    const totalPages = Math.ceil(totalPosts / perPage);
+
+    if (page > totalPages) {
+      return res.status(404).json({ message: "Page not found", success: false });
+    }
+
+    if (req.query.page !== undefined && req.query.perPage !== undefined) {
+      const productListArr = await Product.find({ catName: req.query.catName })
+        .populate("category")
+        .skip((page - 1) * perPage)
+        .limit(perPage)
+        .exec();
+
+      return res.status(200).json({
+        products: productListArr,
+        totalPages: totalPages,
+        page: page,
+        success: true
+      });
+    } else {
+      const productListArr = await Product.find({ catName: req.query.catName })
         .populate("category")
         .skip((page - 1) * perPage)
         .limit(perPage)
@@ -94,793 +160,544 @@ router.get(`/`, async (req, res) => {
           }
         }
       }
-    } else {
-      productList = await Product.find()
-        .populate("category")
-        .skip((page - 1) * perPage)
-        .limit(perPage)
-        .exec();
-    }
-  } else {
-    productList = await Product.find();
-  }
-  return res.status(200).json({
-    products: productList,
-    totalPages: totalPages,
-    page: page,
-  });
-});
 
-router.get(`/catName`, async (req, res) => {
-  let productList = [];
-
-  const page = parseInt(req.query.page) || 1;
-  const perPage = parseInt(req.query.perPage);
-  const totalPosts = await Product.countDocuments();
-  const totalPages = Math.ceil(totalPosts / perPage);
-
-  if (page > totalPages) {
-    return res.status(404).json({ message: "Page not found" });
-  }
-
-  if (req.query.page !== undefined && req.query.perPage !== undefined) {
-    const productListArr = await Product.find({ catName: req.query.catName })
-      .populate("category")
-      .skip((page - 1) * perPage)
-      .limit(perPage)
-      .exec();
-
-    return res.status(200).json({
-      products: productListArr,
-      totalPages: totalPages,
-      page: page,
-    });
-  } else {
-    const productListArr = await Product.find({ catName: req.query.catName })
-      .populate("category")
-      .skip((page - 1) * perPage)
-      .limit(perPage)
-      .exec();
-
-    for (let i = 0; i < productListArr.length; i++) {
-      for (let j = 0; j < productListArr[i].location.length; j++) {
-        if (productListArr[i].location[j].value === req.query.location) {
-          productList.push(productListArr[i]);
-        }
+      if (req.query.location !== "All") {
+        return res.status(200).json({
+          products: productList,
+          totalPages: totalPages,
+          page: page,
+          success: true
+        });
+      } else {
+        return res.status(200).json({
+          products: productListArr,
+          totalPages: totalPages,
+          page: page,
+          success: true
+        });
       }
     }
-
-    if (req.query.location !== "All") {
-      return res.status(200).json({
-        products: productList,
-        totalPages: totalPages,
-        page: page,
-      });
-    } else {
-      return res.status(200).json({
-        products: productListArr,
-        totalPages: totalPages,
-        page: page,
-      });
-    }
+  } catch (error) {
+    console.error('Error in /api/products/catName:', error.stack);
+    return res.status(500).json({ message: 'Server error', error: error.message, success: false });
   }
 });
 
 router.get(`/catId`, async (req, res) => {
-  let productList = [];
-  let productListArr = [];
+  try {
+    let productList = [];
+    let productListArr = [];
 
-  const page = parseInt(req.query.page) || 1;
-  const perPage = parseInt(req.query.perPage);
-  const totalPosts = await Product.countDocuments();
-  const totalPages = Math.ceil(totalPosts / perPage);
+    const page = parseInt(req.query.page) || 1;
+    const perPage = parseInt(req.query.perPage);
+    const totalPosts = await Product.countDocuments();
+    const totalPages = Math.ceil(totalPosts / perPage);
 
-  if (page > totalPages) {
-    return res.status(404).json({ message: "Page not found" });
-  }
-
-  if (req.query.page !== undefined && req.query.perPage !== undefined) {
-    const productListArr = await Product.find({ catId: req.query.catId })
-      .populate("category")
-      .skip((page - 1) * perPage)
-      .limit(perPage)
-      .exec();
-
-    return res.status(200).json({
-      products: productListArr,
-      totalPages: totalPages,
-      page: page,
-    });
-  } else {
-    productListArr = await Product.find({ catId: req.query.catId });
-
-    for (let i = 0; i < productListArr.length; i++) {
-      //console.log(productList[i].location)
-      for (let j = 0; j < productListArr[i].location.length; j++) {
-        if (productListArr[i].location[j].value === req.query.location) {
-          productList.push(productListArr[i]);
-        }
-      }
+    if (page > totalPages) {
+      return res.status(404).json({ message: "Page not found", success: false });
     }
 
-    if (req.query.location !== "All" && req.query.location!==undefined) {
-      return res.status(200).json({
-        products: productList,
-        totalPages: totalPages,
-        page: page,
-      });
-    } else {
+    if (req.query.page !== undefined && req.query.perPage !== undefined) {
+      productListArr = await Product.find({ catId: req.query.catId })
+        .populate("category")
+        .skip((page - 1) * perPage)
+        .limit(perPage)
+        .exec();
+
       return res.status(200).json({
         products: productListArr,
         totalPages: totalPages,
         page: page,
+        success: true
       });
+    } else {
+      productListArr = await Product.find({ catId: req.query.catId }).populate("category");
+
+      for (let i = 0; i < productListArr.length; i++) {
+        for (let j = 0; j < productListArr[i].location.length; j++) {
+          if (productListArr[i].location[j].value === req.query.location) {
+            productList.push(productListArr[i]);
+          }
+        }
+      }
+
+      if (req.query.location !== "All" && req.query.location !== undefined) {
+        return res.status(200).json({
+          products: productList,
+          totalPages: totalPages,
+          page: page,
+          success: true
+        });
+      } else {
+        return res.status(200).json({
+          products: productListArr,
+          totalPages: totalPages,
+          page: page,
+          success: true
+        });
+      }
     }
-
-
-   
-
+  } catch (error) {
+    console.error('Error in /api/products/catId:', error.stack);
+    return res.status(500).json({ message: 'Server error', error: error.message, success: false });
   }
 });
 
 router.get(`/subCatId`, async (req, res) => {
-  let productList = [];
+  try {
+    let productList = [];
 
-  const page = parseInt(req.query.page) || 1;
-  const perPage = parseInt(req.query.perPage);
-  const totalPosts = await Product.countDocuments();
-  const totalPages = Math.ceil(totalPosts / perPage);
+    const page = parseInt(req.query.page) || 1;
+    const perPage = parseInt(req.query.perPage);
+    const totalPosts = await Product.countDocuments();
+    const totalPages = Math.ceil(totalPosts / perPage);
 
-  if (page > totalPages) {
-    return res.status(404).json({ message: "Page not found" });
-  }
-
-  if (req.query.page !== undefined && req.query.perPage !== undefined) {
-    const productListArr = await Product.find({ subCatId: req.query.subCatId })
-      .populate("category")
-      .skip((page - 1) * perPage)
-      .limit(perPage)
-      .exec();
-
-    return res.status(200).json({
-      products: productListArr,
-      totalPages: totalPages,
-      page: page,
-    });
-  } else {
-    const productListArr = await Product.find({ subCatId: req.query.subCatId });
-
-    for (let i = 0; i < productListArr.length; i++) {
-      //console.log(productList[i].location)
-      for (let j = 0; j < productListArr[i].location.length; j++) {
-        if (productListArr[i].location[j].value === req.query.location) {
-          productList.push(productListArr[i]);
-        }
-      }
+    if (page > totalPages) {
+      return res.status(404).json({ message: "Page not found", success: false });
     }
 
-    if (req.query.location !== "All") {
-      return res.status(200).json({
-        products: productList,
-        totalPages: totalPages,
-        page: page,
-      });
-    } else {
+    if (req.query.page !== undefined && req.query.perPage !== undefined) {
+      const productListArr = await Product.find({ subCatId: req.query.subCatId })
+        .populate("category")
+        .skip((page - 1) * perPage)
+        .limit(perPage)
+        .exec();
+
       return res.status(200).json({
         products: productListArr,
         totalPages: totalPages,
         page: page,
+        success: true
       });
+    } else {
+      const productListArr = await Product.find({ subCatId: req.query.subCatId }).populate("category");
+
+      for (let i = 0; i < productListArr.length; i++) {
+        for (let j = 0; j < productListArr[i].location.length; j++) {
+          if (productListArr[i].location[j].value === req.query.location) {
+            productList.push(productListArr[i]);
+          }
+        }
+      }
+
+      if (req.query.location !== "All") {
+        return res.status(200).json({
+          products: productList,
+          totalPages: totalPages,
+          page: page,
+          success: true
+        });
+      } else {
+        return res.status(200).json({
+          products: productListArr,
+          totalPages: totalPages,
+          page: page,
+          success: true
+        });
+      }
     }
+  } catch (error) {
+    console.error('Error in /api/products/subCatId:', error.stack);
+    return res.status(500).json({ message: 'Server error', error: error.message, success: false });
   }
 });
 
 router.get(`/fiterByPrice`, async (req, res) => {
-  let productList = [];
+  try {
+    let productList = [];
 
-  if (req.query.catId !== "" && req.query.catId !== undefined) {
-    const productListArr = await Product.find({
-      catId: req.query.catId,
-    }).populate("category");
+    if (req.query.catId !== "" && req.query.catId !== undefined) {
+      const productListArr = await Product.find({
+        catId: req.query.catId,
+      }).populate("category");
 
-    if (req.query.location !== "All") {
-      for (let i = 0; i < productListArr.length; i++) {
-        //console.log(productList[i].location)
-        for (let j = 0; j < productListArr[i].location.length; j++) {
-          if (productListArr[i].location[j].value === req.query.location) {
-            productList.push(productListArr[i]);
+      if (req.query.location !== "All") {
+        for (let i = 0; i < productListArr.length; i++) {
+          for (let j = 0; j < productListArr[i].location.length; j++) {
+            if (productListArr[i].location[j].value === req.query.location) {
+              productList.push(productListArr[i]);
+            }
           }
         }
+      } else {
+        productList = productListArr;
       }
-    } else {
-      productList = productListArr;
-    }
-  } else if (req.query.subCatId !== "" && req.query.subCatId !== undefined) {
-    const productListArr = await Product.find({
-      subCatId: req.query.subCatId,
-    }).populate("category");
+    } else if (req.query.subCatId !== "" && req.query.subCatId !== undefined) {
+      const productListArr = await Product.find({
+        subCatId: req.query.subCatId,
+      }).populate("category");
 
-    if (req.query.location !== "All") {
-      for (let i = 0; i < productListArr.length; i++) {
-        //console.log(productList[i].location)
-        for (let j = 0; j < productListArr[i].location.length; j++) {
-          if (productListArr[i].location[j].value === req.query.location) {
-            productList.push(productListArr[i]);
+      if (req.query.location !== "All") {
+        for (let i = 0; i < productListArr.length; i++) {
+          for (let j = 0; j < productListArr[i].location.length; j++) {
+            if (productListArr[i].location[j].value === req.query.location) {
+              productList.push(productListArr[i]);
+            }
           }
         }
+      } else {
+        productList = productListArr;
       }
-    } else {
-      productList = productListArr;
     }
+
+    const filteredProducts = productList.filter((product) => {
+      if (req.query.minPrice && product.price < parseInt(+req.query.minPrice)) {
+        return false;
+      }
+      if (req.query.maxPrice && product.price > parseInt(+req.query.maxPrice)) {
+        return false;
+      }
+      return true;
+    });
+
+    return res.status(200).json({
+      products: filteredProducts,
+      totalPages: 0,
+      page: 0,
+      success: true
+    });
+  } catch (error) {
+    console.error('Error in /api/products/fiterByPrice:', error.stack);
+    return res.status(500).json({ message: 'Server error', error: error.message, success: false });
   }
-
-  const filteredProducts = productList.filter((product) => {
-    if (req.query.minPrice && product.price < parseInt(+req.query.minPrice)) {
-      return false;
-    }
-    if (req.query.maxPrice && product.price > parseInt(+req.query.maxPrice)) {
-      return false;
-    }
-    return true;
-  });
-
-  return res.status(200).json({
-    products: filteredProducts,
-    totalPages: 0,
-    page: 0,
-  });
 });
 
 router.get(`/rating`, async (req, res) => {
-  let productList = [];
+  try {
+    let productList = [];
 
-  if (req.query.catId !== "" && req.query.catId !== undefined) {
-    const productListArr = await Product.find({
-      catId: req.query.catId,
-      rating: req.query.rating,
-    }).populate("category");
+    if (req.query.catId !== "" && req.query.catId !== undefined) {
+      const productListArr = await Product.find({
+        catId: req.query.catId,
+        rating: req.query.rating,
+      }).populate("category");
 
-    if (req.query.location !== "All") {
-      for (let i = 0; i < productListArr.length; i++) {
-        //console.log(productList[i].location)
-        for (let j = 0; j < productListArr[i].location.length; j++) {
-          if (productListArr[i].location[j].value === req.query.location) {
-            productList.push(productListArr[i]);
+      if (req.query.location !== "All") {
+        for (let i = 0; i < productListArr.length; i++) {
+          for (let j = 0; j < productListArr[i].location.length; j++) {
+            if (productListArr[i].location[j].value === req.query.location) {
+              productList.push(productListArr[i]);
+            }
           }
         }
+      } else {
+        productList = productListArr;
       }
-    } else {
-      productList = productListArr;
-    }
-  } else if (req.query.subCatId !== "" && req.query.subCatId !== undefined) {
-    const productListArr = await Product.find({
-      subCatId: req.query.subCatId,
-      rating: req.query.rating,
-    }).populate("category");
+    } else if (req.query.subCatId !== "" && req.query.subCatId !== undefined) {
+      const productListArr = await Product.find({
+        subCatId: req.query.subCatId,
+        rating: req.query.rating,
+      }).populate("category");
 
-    if (req.query.location !== "All") {
-      for (let i = 0; i < productListArr.length; i++) {
-        //console.log(productList[i].location)
-        for (let j = 0; j < productListArr[i].location.length; j++) {
-          if (productListArr[i].location[j].value === req.query.location) {
-            productList.push(productListArr[i]);
+      if (req.query.location !== "All") {
+        for (let i = 0; i < productListArr.length; i++) {
+          for (let j = 0; j < productListArr[i].location.length; j++) {
+            if (productListArr[i].location[j].value === req.query.location) {
+              productList.push(productListArr[i]);
+            }
           }
         }
+      } else {
+        productList = productListArr;
       }
-    } else {
-      productList = productListArr;
     }
+
+    return res.status(200).json({
+      products: productList,
+      totalPages: 0,
+      page: 0,
+      success: true
+    });
+  } catch (error) {
+    console.error('Error in /api/products/rating:', error.stack);
+    return res.status(500).json({ message: 'Server error', error: error.message, success: false });
   }
-
-  return res.status(200).json({
-    products: productList,
-    totalPages: 0,
-    page: 0,
-  });
 });
 
 router.get(`/get/count`, async (req, res) => {
-  const productsCount = await Product.countDocuments();
-
-  if (!productsCount) {
-    res.status(500).json({ success: false });
-  } else {
-    res.send({
+  try {
+    const productsCount = await Product.countDocuments();
+    return res.status(200).json({
       productsCount: productsCount,
+      success: true
     });
+  } catch (error) {
+    console.error('Error in /api/products/get/count:', error.stack);
+    return res.status(500).json({ message: 'Server error', error: error.message, success: false });
   }
 });
 
 router.get(`/featured`, async (req, res) => {
-  let productList = [];
-  if (req.query.location !== undefined && req.query.location !== null) {
-    const productListArr = await Product.find({ isFeatured: true }).populate(
-      "category"
-    );
+  try {
+    let productList = [];
+    if (req.query.location !== undefined && req.query.location !== null) {
+      const productListArr = await Product.find({ isFeatured: true }).populate("category");
 
-    for (let i = 0; i < productListArr.length; i++) {
-      for (let j = 0; j < productListArr[i].location.length; j++) {
-        if (productListArr[i].location[j].value === req.query.location) {
-          productList.push(productListArr[i]);
+      for (let i = 0; i < productListArr.length; i++) {
+        for (let j = 0; j < productListArr[i].location.length; j++) {
+          if (productListArr[i].location[j].value === req.query.location) {
+            productList.push(productListArr[i]);
+          }
         }
       }
+    } else {
+      productList = await Product.find({ isFeatured: true }).populate("category");
     }
-  } else {
-    productList = await Product.find({ isFeatured: true }).populate("category");
-  }
 
-  if (!productList) {
-    res.status(500).json({ success: false });
+    return res.status(200).json({
+      products: productList,
+      success: true
+    });
+  } catch (error) {
+    console.error('Error in /api/products/featured:', error.stack);
+    return res.status(500).json({ message: 'Server error', error: error.message, success: false });
   }
-
-  return res.status(200).json(productList);
 });
 
 router.get(`/recentlyViewd`, async (req, res) => {
-  let productList = [];
-  productList = await RecentlyViewd.find(req.query).populate("category");
-
-  if (!productList) {
-    res.status(500).json({ success: false });
+  try {
+    const productList = await RecentlyViewd.find(req.query).populate("category");
+    return res.status(200).json({
+      products: productList,
+      success: true
+    });
+  } catch (error) {
+    console.error('Error in /api/products/recentlyViewd:', error.stack);
+    return res.status(500).json({ message: 'Server error', error: error.message, success: false });
   }
-
-  return res.status(200).json(productList);
 });
 
 router.post(`/recentlyViewd`, async (req, res) => {
-  let findProduct = await RecentlyViewd.find({ prodId: req.body.id });
+  try {
+    let findProduct = await RecentlyViewd.find({ prodId: req.body.id });
 
-  var product;
-
-  if (findProduct.length === 0) {
-    product = new RecentlyViewd({
-      prodId: req.body.id,
-      name: req.body.name,
-      description: req.body.description,
-      images: req.body.images,
-      brand: req.body.brand,
-      price: req.body.price,
-      oldPrice: req.body.oldPrice,
-      subCatId: req.body.subCatId,
-      catName: req.body.catName,
-      subCat: req.body.subCat,
-      category: req.body.category,
-      countInStock: req.body.countInStock,
-      rating: req.body.rating,
-      isFeatured: req.body.isFeatured,
-      discount: req.body.discount,
-      productRam: req.body.productRam,
-      size: req.body.size,
-      productWeight: req.body.productWeight,
-    });
-
-    product = await product.save();
-
-    if (!product) {
-      res.status(500).json({
-        error: err,
-        success: false,
+    if (findProduct.length === 0) {
+      const product = new RecentlyViewd({
+        prodId: req.body.id,
+        name: req.body.name,
+        description: req.body.description,
+        images: req.body.images,
+        brand: req.body.brand,
+        price: req.body.price,
+        oldPrice: req.body.oldPrice,
+        subCatId: req.body.subCatId,
+        catName: req.body.catName,
+        subCat: req.body.subCat,
+        category: req.body.category,
+        countInStock: req.body.countInStock,
+        rating: req.body.rating,
+        isFeatured: req.body.isFeatured,
+        discount: req.body.discount,
+        productRam: req.body.productRam,
+        size: req.body.size,
+        productWeight: req.body.productWeight,
       });
-    }
 
-    res.status(201).json(product);
+      const savedProduct = await product.save();
+      if (!savedProduct) {
+        return res.status(500).json({ message: 'Failed to save recently viewed product', success: false });
+      }
+
+      return res.status(201).json(savedProduct);
+    }
+    return res.status(200).json({ message: 'Product already in recently viewed', success: true });
+  } catch (error) {
+    console.error('Error in /api/products/recentlyViewd:', error.stack);
+    return res.status(500).json({ message: 'Server error', error: error.message, success: false });
   }
 });
 
 router.post(`/create`, async (req, res) => {
-  const category = await Category.findById(req.body.category);
-  if (!category) {
-    return res.status(404).send("invalid Category!");
-  }
+  try {
+    // Validate category ID
+    if (!mongoose.isValidObjectId(req.body.category)) {
+      return res.status(400).json({ message: 'Invalid Category ID', success: false });
+    }
+    const category = await Category.findById(req.body.category);
+    if (!category) {
+      return res.status(404).json({ message: 'Category not found', success: false });
+    }
 
-  const images_Array = [];
-  const uploadedImages = await ImageUpload.find();
-
-  const images_Arr = uploadedImages?.map((item) => {
-    item.images?.map((image) => {
-      images_Array.push(image);
-      console.log(image);
+    // Fetch images from ImageUpload
+    const images_Array = [];
+    const uploadedImages = await ImageUpload.find();
+    uploadedImages?.forEach((item) => {
+      item.images?.forEach((image) => {
+        images_Array.push(image);
+      });
     });
-  });
 
-  product = new Product({
-    name: req.body.name,
-    description: req.body.description,
-    images: images_Array,
-    brand: req.body.brand,
-    price: req.body.price,
-    oldPrice: req.body.oldPrice,
-    catId: req.body.catId,
-    catName: req.body.catName,
-    subCat: req.body.subCat,
-    subCatId: req.body.subCatId,
-    subCatName: req.body.subCatName,
-    category: req.body.category,
-    countInStock: req.body.countInStock,
-    rating: req.body.rating,
-    isFeatured: req.body.isFeatured,
-    discount: req.body.discount,
-    productRam: req.body.productRam,
-    size: req.body.size,
-    productWeight: req.body.productWeight,
-    location: req.body.location !== "" ? req.body.location : "All",
-  });
+    // Validate required fields
+    const requiredFields = ['name', 'description', 'price', 'category', 'rating', 'isFeatured'];
+    for (const field of requiredFields) {
+      if (req.body[field] === undefined || req.body[field] === null || req.body[field] === '') {
+        return res.status(400).json({ message: `Missing required field: ${field}`, success: false });
+      }
+    }
 
-  product = await product.save();
-
-  if (!product) {
-    res.status(500).json({
-      error: err,
-      success: false,
+    // Create product
+    const product = new Product({
+      name: req.body.name,
+      description: req.body.description,
+      images: images_Array,
+      brand: req.body.brand || '',
+      price: parseFloat(req.body.price) || 0,
+      oldPrice: req.body.oldPrice ? parseFloat(req.body.oldPrice) : null,
+      catId: req.body.catId || '',
+      catName: req.body.catName || '',
+      subCat: req.body.subCat || '',
+      subCatId: req.body.subCatId || '',
+      subCatName: req.body.subCatName || '',
+      category: req.body.category,
+      countInStock: req.body.countInStock ? parseInt(req.body.countInStock) : null,
+      rating: parseInt(req.body.rating) || 0,
+      isFeatured: req.body.isFeatured === true || req.body.isFeatured === 'true',
+      discount: req.body.discount ? parseFloat(req.body.discount) : null,
+      productRam: Array.isArray(req.body.productRam) ? req.body.productRam : [],
+      size: Array.isArray(req.body.size) ? req.body.size : [],
+      productWeight: Array.isArray(req.body.productWeight) ? req.body.productWeight : [],
+      location: Array.isArray(req.body.location) ? req.body.location : ['All'],
     });
+
+    const savedProduct = await product.save();
+    if (!savedProduct) {
+      return res.status(500).json({ message: 'Failed to save product', success: false });
+    }
+
+    let imagesArr = []; // Local scope
+
+    return res.status(201).json(savedProduct);
+  } catch (error) {
+    console.error('Error in /api/products/create:', error.stack);
+    return res.status(500).json({ message: 'Server error', error: error.message, success: false });
   }
-
-  imagesArr = [];
-
-  res.status(201).json(product);
 });
 
 router.get("/:id", async (req, res) => {
-  productEditId = req.params.id;
-
-  const product = await Product.findById(req.params.id).populate("category");
-
-  if (!product) {
-    res
-      .status(500)
-      .json({ message: "The product with the given ID was not found." });
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(400).json({ message: 'Invalid Product ID', success: false });
+    }
+    const product = await Product.findById(req.params.id).populate("category");
+    if (!product) {
+      return res.status(404).json({ message: 'The product with the given ID was not found', success: false });
+    }
+    return res.status(200).json(product);
+  } catch (error) {
+    console.error('Error in /api/products/:id:', error.stack);
+    return res.status(500).json({ message: 'Server error', error: error.message, success: false });
   }
-  return res.status(200).send(product);
 });
 
 router.delete("/deleteImage", async (req, res) => {
-  const imgUrl = req.query.img;
+  try {
+    const imgUrl = req.query.img;
+    if (!imgUrl) {
+      return res.status(400).json({ message: 'Image URL is required', success: false });
+    }
 
-  // console.log(imgUrl)
+    const urlArr = imgUrl.split("/");
+    const image = urlArr[urlArr.length - 1];
+    const imageName = image.split(".")[0];
 
-  const urlArr = imgUrl.split("/");
-  const image = urlArr[urlArr.length - 1];
-
-  const imageName = image.split(".")[0];
-
-  const response = await cloudinary.uploader.destroy(
-    imageName,
-    (error, result) => {}
-  );
-
-  if (response) {
-    res.status(200).send(response);
+    const response = await cloudinary.uploader.destroy(imageName);
+    return res.status(200).json(response);
+  } catch (error) {
+    console.error('Error in /api/products/deleteImage:', error.stack);
+    return res.status(500).json({ message: 'Server error', error: error.message, success: false });
   }
 });
 
 router.delete("/:id", async (req, res) => {
-  const product = await Product.findById(req.params.id);
-  const images = product.images;
-
-  for (img of images) {
-    const imgUrl = img;
-    const urlArr = imgUrl.split("/");
-    const image = urlArr[urlArr.length - 1];
-
-    const imageName = image.split(".")[0];
-
-    if (imageName) {
-      cloudinary.uploader.destroy(imageName, (error, result) => {
-        // console.log(error, result);
-      });
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(400).json({ message: 'Invalid Product ID', success: false });
     }
 
-    //  console.log(imageName)
-  }
+    const product = await Product.findById(req.params.id);
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found', success: false });
+    }
 
-  const deletedProduct = await Product.findByIdAndDelete(req.params.id);
+    const images = product.images;
+    for (const img of images) {
+      const urlArr = img.split("/");
+      const image = urlArr[urlArr.length - 1];
+      const imageName = image.split(".")[0];
+      if (imageName) {
+        await cloudinary.uploader.destroy(imageName);
+      }
+    }
 
-  const myListItems = await MyList.find({ productId: req.params.id });
+    const deletedProduct = await Product.findByIdAndDelete(req.params.id);
+    const myListItems = await MyList.find({ productId: req.params.id });
+    for (const item of myListItems) {
+      await MyList.findByIdAndDelete(item.id);
+    }
 
-  for (var i = 0; i < myListItems.length; i++) {
-    await MyList.findByIdAndDelete(myListItems[i].id);
-  }
+    const cartItems = await Cart.find({ productId: req.params.id });
+    for (const item of cartItems) {
+      await Cart.findByIdAndDelete(item.id);
+    }
 
-  const cartItems = await Cart.find({ productId: req.params.id });
-
-  for (var i = 0; i < cartItems.length; i++) {
-    await Cart.findByIdAndDelete(cartItems[i].id);
-  }
-
-  if (!deletedProduct) {
-    res.status(404).json({
-      message: "Product not found!",
-      success: false,
+    return res.status(200).json({
+      message: 'Product Deleted',
+      success: true
     });
+  } catch (error) {
+    console.error('Error in /api/products/:id (DELETE):', error.stack);
+    return res.status(500).json({ message: 'Server error', error: error.message, success: false });
   }
-
-  res.status(200).json({
-    success: true,
-    message: "Product Deleted!",
-  });
 });
 
 router.put("/:id", async (req, res) => {
-  const product = await Product.findByIdAndUpdate(
-    req.params.id,
-    {
-      name: req.body.name,
-      subCat: req.body.subCat,
-      description: req.body.description,
-      images: req.body.images,
-      brand: req.body.brand,
-      price: req.body.price,
-      oldPrice: req.body.oldPrice,
-      catId: req.body.catId,
-      subCat: req.body.subCat,
-      subCatId: req.body.subCatId,
-      subCatName: req.body.subCatName,
-      catName: req.body.catName,
-      category: req.body.category,
-      countInStock: req.body.countInStock,
-      rating: req.body.rating,
-      numReviews: req.body.numReviews,
-      isFeatured: req.body.isFeatured,
-      productRam: req.body.productRam,
-      size: req.body.size,
-      productWeight: req.body.productWeight,
-      location: req.body.location,
-    },
-    { new: true }
-  );
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(400).json({ message: 'Invalid Product ID', success: false });
+    }
 
-  if (!product) {
-    res.status(404).json({
-      message: "the product can not be updated!",
-      status: false,
+    const product = await Product.findByIdAndUpdate(
+      req.params.id,
+      {
+        name: req.body.name,
+        subCat: req.body.subCat,
+        description: req.body.description,
+        images: req.body.images,
+        brand: req.body.brand,
+        price: req.body.price,
+        oldPrice: req.body.oldPrice,
+        catId: req.body.catId,
+        subCatId: req.body.subCatId,
+        subCatName: req.body.subCatName,
+        catName: req.body.catName,
+        category: req.body.category,
+        countInStock: req.body.countInStock,
+        rating: req.body.rating,
+        numReviews: req.body.numReviews,
+        isFeatured: req.body.isFeatured,
+        productRam: req.body.productRam,
+        size: req.body.size,
+        productWeight: req.body.productWeight,
+        location: req.body.location,
+      },
+      { new: true }
+    );
+
+    if (!product) {
+      return res.status(404).json({ message: 'The product cannot be updated', success: false });
+    }
+
+    let imagesArr = []; // Local scope
+
+    return res.status(200).json({
+      message: 'The product is updated',
+      success: true,
+      product
     });
+  } catch (error) {
+    console.error('Error in /api/products/:id (PUT):', error.stack);
+    return res.status(500).json({ message: 'Server error', error: error.message, success: false });
   }
-
-  imagesArr = [];
-
-  res.status(200).json({
-    message: "the product is updated!",
-    status: true,
-  });
-
-  //res.send(product);
 });
-
-// router.get(`/`, async (req, res) => {
-//   const page = parseInt(req.query.page) || 1;
-//   const perPage = parseInt(req.query.perPage);
-//   const totalPosts = await Product.countDocuments();
-//   const totalPages = Math.ceil(totalPosts / perPage);
-
-//   if (page > totalPages) {
-//     return res.status(404).json({ message: "Page not found" });
-//   }
-
-//   let productList = [];
-
-//   if (req.query.minPrice !== undefined && req.query.maxPrice !== undefined) {
-//     if (
-//       req.query.subCatId !== undefined &&
-//       req.query.subCatId !== null &&
-//       req.query.subCatId !== ""
-//     ) {
-//       if (
-//         req.query.location !== undefined &&
-//         req.query.location !== null &&
-//         req.query.location !== "All"
-//       ) {
-//         productList = await Product.find({
-//           subCatId: req.query.subCatId,
-//           location: req.query.location,
-//         })
-//           .populate("category")
-//           .skip((page - 1) * perPage)
-//           .limit(perPage)
-//           .exec();
-//       } else {
-//         productList = await Product.find({
-//           subCatId: req.query.subCatId,
-//         })
-//           .populate("category")
-//           .skip((page - 1) * perPage)
-//           .limit(perPage)
-//           .exec();
-//       }
-//     }
-
-//     if (
-//       req.query.catId !== undefined &&
-//       req.query.catId !== null &&
-//       req.query.catId !== ""
-//     ) {
-//       if (
-//         req.query.location !== undefined &&
-//         req.query.location !== null &&
-//         req.query.location !== "All"
-//       ) {
-//         productList = await Product.find({
-//           catId: req.query.catId,
-//           location: req.query.location,
-//         })
-//           .populate("category")
-//           .skip((page - 1) * perPage)
-//           .limit(perPage)
-//           .exec();
-//       } else {
-//         productList = await Product.find({ catId: req.query.catId })
-//           .populate("category")
-//           .skip((page - 1) * perPage)
-//           .limit(perPage)
-//           .exec();
-//       }
-//     }
-
-//     const filteredProducts = productList.filter((product) => {
-//       if (req.query.minPrice && product.price < parseInt(+req.query.minPrice)) {
-//         return false;
-//       }
-//       if (req.query.maxPrice && product.price > parseInt(+req.query.maxPrice)) {
-//         return false;
-//       }
-//       return true;
-//     });
-
-//     if (!productList) {
-//       res.status(500).json({ success: false });
-//     }
-//     return res.status(200).json({
-//       products: filteredProducts,
-//       totalPages: totalPages,
-//       page: page,
-//     });
-//   } else if (req.query.page !== undefined && req.query.perPage !== undefined) {
-//     if (
-//       req.query.location !== undefined &&
-//       req.query.location !== null &&
-//       req.query.location !== "All"
-//     ) {
-//       productList = await Product.find({ location: req.query.location })
-//         .populate("category")
-//         .skip((page - 1) * perPage)
-//         .limit(perPage)
-//         .exec();
-//     } else {
-//       productList = await Product.find()
-//         .populate("category")
-//         .skip((page - 1) * perPage)
-//         .limit(perPage)
-//         .exec();
-//     }
-
-//     if (!productList) {
-//       res.status(500).json({ success: false });
-//     }
-//     return res.status(200).json({
-//       products: productList,
-//       totalPages: totalPages,
-//       page: page,
-//     });
-//   } else {
-//     if (
-//       req.query.location !== undefined &&
-//       req.query.location !== null &&
-//       req.query.location !== "All"
-//     ) {
-//       productList = await Product.find(req.query)
-//         .populate("category")
-//         .skip((page - 1) * perPage)
-//         .limit(perPage)
-//         .exec();
-//     } else if (
-//       req.query.catId !== "" &&
-//       req.query.catId !== null &&
-//       req.query.catId !== undefined
-//     ) {
-//       productList = await Product.find({ catId: req.query.catId })
-//         .populate("category")
-//         .skip((page - 1) * perPage)
-//         .limit(perPage)
-//         .exec();
-//     } else if (
-//       req.query.catName !== "" &&
-//       req.query.catName !== null &&
-//       req.query.catName !== undefined
-//     ) {
-//       productList = await Product.find({ catName: req.query.catName })
-//         .populate("category")
-//         .skip((page - 1) * perPage)
-//         .limit(perPage)
-//         .exec();
-//     } else if (
-//       req.query.subCatId !== "" &&
-//       req.query.subCatId !== null &&
-//       req.query.subCatId !== undefined
-//     ) {
-//       productList = await Product.find({
-//         subCatId: req.query.subCatId,
-//       })
-//         .populate("category")
-//         .skip((page - 1) * perPage)
-//         .limit(perPage)
-//         .exec();
-//     }
-
-//     if (
-//       req.query.rating !== "" &&
-//       req.query.rating !== null &&
-//       req.query.rating !== undefined
-//     ) {
-//       if (
-//         req.query.catId !== "" &&
-//         req.query.catId !== null &&
-//         req.query.catId !== undefined
-//       ) {
-//         if (
-//           req.query.location !== undefined &&
-//           req.query.location !== null &&
-//           req.query.location !== "All"
-//         ) {
-//           productList = await Product.find({
-//             rating: req.query.rating,
-//             catId: req.query.catId,
-//             location: req.query.location,
-//           }).populate("category").skip((page - 1) * perPage)
-//           .limit(perPage)
-//           .exec();
-//         } else {
-//           productList = await Product.find({
-//             rating: req.query.rating,
-//             catId: req.query.catId,
-//           }).populate("category").skip((page - 1) * perPage)
-//           .limit(perPage)
-//           .exec();
-//         }
-//       }
-//     }
-
-//     if (
-//       req.query.rating !== "" &&
-//       req.query.rating !== null &&
-//       req.query.rating !== undefined
-//     ) {
-//       if (
-//         req.query.subCatId !== "" &&
-//         req.query.subCatId !== null &&
-//         req.query.subCatId !== undefined
-//       ) {
-//         if (
-//           req.query.location !== undefined &&
-//           req.query.location !== null &&
-//           req.query.location !== "All"
-//         ) {
-//           productList = await Product.find({
-//             rating: req.query.rating,
-//             subCatId: req.query.subCatId,
-//             location: req.query.location,
-//           }).populate("category").skip((page - 1) * perPage)
-//           .limit(perPage)
-//           .exec();
-//         } else {
-//           productList = await Product.find({
-//             rating: req.query.rating,
-//             subCatId: req.query.subCatId,
-//           }).populate("category").skip((page - 1) * perPage)
-//           .limit(perPage)
-//           .exec();
-//         }
-//       }
-//     }
-
-//     if (!productList) {
-//       res.status(500).json({ success: false });
-//     }
-
-//     return res.status(200).json({
-//       products: productList,
-//       totalPages: totalPages,
-//       page: page,
-//     });
-//   }
-// });
 
 module.exports = router;
