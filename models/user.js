@@ -1,45 +1,45 @@
 const mongoose = require('mongoose');
 
 const userSchema = mongoose.Schema({
-    name: {
-        type: String,
-        required: true
+    name:{
+        type:String,
+        required:true
     },
-    phone: {
-        type: String,
+    phone:{
+        type:String,
     },
-    email: {
-        type: String,
-        required: true,
+    email:{
+        type:String,
+        required:true,
     },
-    password: {
-        type: String,
+    password:{
+        type:String,
     },
-    images: [
+    images:[
         {
-            type: String,
-            required: true
+            type:String,
+            required:true
         }
     ],
-    isAdmin: {
+    isAdmin:{
         type: Boolean,
         default: false,
     },
-    isVerified: {
-        type: Boolean,
-        default: false
+    isVerified:{
+        type:Boolean,
+        default:false
     },
-    otp: {
-        type: String
+    otp:{
+        type:String
     },
-    otpExpires: {
-        type: Date
+    otpExpires:{
+        type:Date
     },
     date: {
         type: Date,
         default: Date.now
     },
-}, { timestamps: true });
+},{timeStamps:true})
 
 userSchema.virtual('id').get(function () {
     return this._id.toHexString();
@@ -49,4 +49,5 @@ userSchema.set('toJSON', {
     virtuals: true,
 });
 
-module.exports = mongoose.model('User', userSchema);
+exports.User = mongoose.model('User', userSchema);
+exports.userSchema = userSchema;
