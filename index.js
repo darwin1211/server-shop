@@ -1,18 +1,18 @@
 require('dotenv').config();
 const express = require('express');
-const bodyParser = require('body-parser');
 const mongoose = require('mongoose');
 const cors = require('cors');
 
 const app = express();
 
-// ─── PROPER CORS SETUP FOR MULTIPLE ORIGINS ───
+// CORS setup
 const corsOptions = {
   origin: function (origin, callback) {
     const allowedOrigins = [
       'https://vapemaster.netlify.app',
-      'https://admin222.netlify.app',
+      'https://admin222.netlify.app'
     ];
+    console.log('Request Origin:', origin); // Debug origin
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
@@ -21,60 +21,48 @@ const corsOptions = {
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true,
+  credentials: true
 };
-
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions)); // handle preflight requests
+app.options('*', cors(corsOptions));
 
-// ─── MIDDLEWARE ───
-app.use(bodyParser.json());
+// Middleware
 app.use(express.json());
 app.use('/uploads', express.static('uploads'));
 
-// ─── ROUTES ───
-const userRoutes             = require('./routes/user.js');
-const categoryRoutes         = require('./routes/categories');
-const productRoutes          = require('./routes/products');
-const imageUploadRoutes      = require('./helper/imageUpload.js');
-const productWeightRoutes    = require('./routes/productWeight.js');
-const productRAMSRoutes      = require('./routes/productRAMS.js');
-const productSIZESRoutes     = require('./routes/productSize.js');
-const productReviews         = require('./routes/productReviews.js');
-const cartRoutes             = require('./routes/cart.js');
-const myListRoutes           = require('./routes/myList.js');
-const ordersRoutes           = require('./routes/orders.js');
-const homeBannerRoutes       = require('./routes/homeBanner.js');
-const searchRoutes           = require('./routes/search.js');
-const bannersRoutes          = require('./routes/banners.js');
-const homeSideBannerRoutes   = require('./routes/homeSideBanner.js');
-const homeBottomBannerRoutes = require('./routes/homeBottomBanner.js');
-const cashfreeRoutes         = require('./routes/cashfree.js');
+// Routes
+app.use('/api/user', require('./routes/user.js'));
+app.use('/api/category', require('./routes/categories'));
+app.use('/api/products', require('./routes/products'));
+app.use('/api/imageUpload', require('./helper/imageUpload.js'));
+app.use('/api/productWeight', require('./routes/productWeight.js'));
+app.use('/api/productRAMS', require('./routes/productRAMS.js'));
+app.use('/api/productSIZE', require('./routes/productSize.js'));
+app.use('/api/productReviews', require('./routes/productReviews.js'));
+app.use('/api/cart', require('./routes/cart.js'));
+app.use('/api/my-list', require('./routes/myList.js'));
+app.use('/api/orders', require('./routes/orders.js'));
+app.use('/api/homeBanner', require('./routes/homeBanner.js'));
+app.use('/api/search', require('./routes/search.js'));
+app.use('/api/banners', require('./routes/banners.js'));
+app.use('/api/homeSideBanners', require('./routes/homeSideBanner.js'));
+app.use('/api/homeBottomBanners', require('./routes/homeBottomBanner.js'));
+app.use('/api/cashfree-token', require('./routes/cashfree.js'));
 
-// ─── API ROUTES ───
-app.use('/api/user', userRoutes);
-app.use('/api/category', categoryRoutes);
-app.use('/api/products', productRoutes);
-app.use('/api/imageUpload', imageUploadRoutes);
-app.use('/api/productWeight', productWeightRoutes);
-app.use('/api/productRAMS', productRAMSRoutes);
-app.use('/api/productSIZE', productSIZESRoutes);
-app.use('/api/productReviews', productReviews);
-app.use('/api/cart', cartRoutes);
-app.use('/api/my-list', myListRoutes);
-app.use('/api/orders', ordersRoutes);
-app.use('/api/homeBanner', homeBannerRoutes);
-app.use('/api/search', searchRoutes);
-app.use('/api/banners', bannersRoutes);
-app.use('/api/homeSideBanners', homeSideBannerRoutes);
-app.use('/api/homeBottomBanners', homeBottomBannerRoutes);
-app.use('/api/cashfree-token', cashfreeRoutes);
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Server error:', err.stack);
+  res.header('Access-Control-Allow-Origin', 'https://admin222.netlify.app');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.status(500).json({ message: 'Server error', error: err.message, success: false });
+});
 
-// ─── DATABASE CONNECTION & SERVER START ───
+// Database connection
 mongoose
   .connect(process.env.CONNECTION_STRING, {
     useNewUrlParser: true,
-    useUnifiedTopology: true,
+    useUnifiedTopology: true
   })
   .then(() => {
     console.log('✅ Database connected successfully');
