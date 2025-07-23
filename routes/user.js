@@ -27,7 +27,6 @@ const storage = multer.diskStorage({
   },
   filename: function (req, file, cb) {
     cb(null, `${Date.now()}_${file.originalname}`);
-    //imagesArr.push(`${Date.now()}_${file.originalname}`)
   },
 });
 
@@ -61,7 +60,8 @@ router.post(`/upload`, upload.array("images"), async (req, res) => {
     imagesUploaded = await imagesUploaded.save();
     return res.status(200).json(imagesArr);
   } catch (error) {
-    console.log(error);
+    console.error("Error in image upload:", error);
+    return res.status(500).json({ success: false, message: "Server error during image upload" });
   }
 });
 
@@ -69,86 +69,64 @@ router.post(`/signup`, async (req, res) => {
   const { name, phone, email, password, isAdmin } = req.body;
 
   try {
-    // Generate verification code
     const verifyCode = Math.floor(100000 + Math.random() * 900000).toString();
     let user;
-
-    // If the user exists but is not verified, update the existing user
 
     const existingUser = await User.findOne({ email: email });
     const existingUserByPh = await User.findOne({ phone: phone });
 
     if (existingUser) {
-      res.json({
-        status: "FAILED",
-        msg: "User already exist with this email!",
+      return res.status(400).json({
+        success: false,
+        message: "User already exists with this email",
       });
-      return;
     }
 
     if (existingUserByPh) {
-      res.json({
-        status: "FAILED",
-        msg: "User already exist with this phone number!",
+      return res.status(400).json({
+        success: false,
+        message: "User already exists with this phone number",
       });
-      return;
     }
 
-    if (existingUser) {
-      const hashPassword = await bcrypt.hash(password, 10);
-      existingUser.password = hashPassword;
-      existingUser.otp = verifyCode;
-      existingUser.otpExpires = Date.now() + 600000; // 10 minutes
-      await existingUser.save();
-      user = existingUser;
-    } else {
-      // Create a new user
-      const hashPassword = await bcrypt.hash(password, 10);
+    const hashPassword = await bcrypt.hash(password, 10);
 
-      user = new User({
-        name,
-        email,
-        phone,
-        password: hashPassword,
-        isAdmin,
-        otp: verifyCode,
-        otpExpires: Date.now() + 600000, // 10 minutes
-      });
+    user = new User({
+      name,
+      email,
+      phone,
+      password: hashPassword,
+      isAdmin,
+      otp: verifyCode,
+      otpExpires: Date.now() + 600000, // 10 minutes
+    });
 
-      await user.save();
-    }
+    await user.save();
 
-    // Send verification email
-    const resp = sendEmailFun(
+    const emailSent = await sendEmailFun(
       email,
       "Verify Email",
       "",
       "Your OTP is " + verifyCode
     );
 
-    // Create a JWT token for verification purposes
+    if (!emailSent) {
+      return res.status(500).json({ success: false, message: "Failed to send verification email" });
+    }
+
     const token = jwt.sign(
       { email: user.email, id: user._id },
       process.env.JSON_WEB_TOKEN_SECRET_KEY
     );
 
-    // res.cookie('token', token, {
-    //     httpOnly: false,
-    //     sameSite: "none",0
-    //     secure: true,
-    //     maxAge: 3600000,
-    // });
-
-    // Send success response
     return res.status(200).json({
       success: true,
       message: "User registered successfully! Please verify your email.",
-      token: token, // Optional: include this if needed for verification
+      token: token,
     });
   } catch (error) {
-    console.log(error);
-    res.json({ status: "FAILED", msg: "something went wrong" });
-    return;
+    console.error("Error in signup:", error);
+    return res.status(500).json({ success: false, message: "Server error" });
   }
 });
 
@@ -156,25 +134,39 @@ router.post(`/verifyAccount/resendOtp`, async (req, res) => {
   const { email } = req.body;
 
   try {
-    // Generate verification code
-    const verifyCode = Math.floor(100000 + Math.random() * 900000).toString();
-
-    // If the user exists but is not verified, update the existing user
-
-    const existingUser = await User.findOne({ email: email });
-
-    if (existingUser) {
-      return res.status(200).json({
-        success: true,
-        message: "OTP SEND",
-        otp: verifyCode,
-        existingUserId: existingUser._id,
-      });
+    if (!email) {
+      return res.status(400).json({ success: false, message: "Email is required" });
     }
+
+    const existingUser = await User.findOne({ email });
+    if (!existingUser) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    const verifyCode = Math.floor(100000 + Math.random() * 900000).toString();
+    existingUser.otp = verifyCode;
+    existingUser.otpExpires = Date.now() + 600000; // 10 minutes
+    await existingUser.save();
+
+    const emailSent = await sendEmailFun(
+      email,
+      "Verify Email",
+      "",
+      "Your OTP is " + verifyCode
+    );
+
+    if (!emailSent) {
+      return res.status(500).json({ success: false, message: "Failed to send OTP email" });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "OTP sent successfully",
+      existingUserId: existingUser._id,
+    });
   } catch (error) {
-    console.log(error);
-    res.json({ status: "FAILED", msg: "something went wrong" });
-    return;
+    console.error("Error in resendOtp:", error);
+    return res.status(500).json({ success: false, message: "Server error" });
   }
 });
 
@@ -183,58 +175,56 @@ router.put(`/verifyAccount/emailVerify/:id`, async (req, res) => {
 
   try {
     const existingUser = await User.findOne({ email: email });
-
-    console.log(existingUser);
-
-    if (existingUser) {
-      const user = await User.findByIdAndUpdate(
-        req.params.id,
-        {
-          name: existingUser.name,
-          email: email,
-          phone: existingUser.phone,
-          password: existingUser.password,
-          images: existingUser.images,
-          isAdmin: existingUser.isAdmin,
-          isVerified: existingUser.isVerified,
-          otp: otp,
-          otpExpires: Date.now() + 600000,
-        },
-        { new: true }
-      );
+    if (!existingUser) {
+      return res.status(404).json({ success: false, message: "User not found" });
     }
 
-    // Send verification email
-    const resp = sendEmailFun(email, "Verify Email", "", "Your OTP is " + otp);
+    const user = await User.findByIdAndUpdate(
+      req.params.id,
+      {
+        name: existingUser.name,
+        email: email,
+        phone: existingUser.phone,
+        password: existingUser.password,
+        images: existingUser.images,
+        isAdmin: existingUser.isAdmin,
+        isVerified: existingUser.isVerified,
+        otp: otp,
+        otpExpires: Date.now() + 600000,
+      },
+      { new: true }
+    );
 
-    // Create a JWT token for verification purposes
+    const emailSent = await sendEmailFun(
+      email,
+      "Verify Email",
+      "",
+      "Your OTP is " + otp
+    );
+
+    if (!emailSent) {
+      return res.status(500).json({ success: false, message: "Failed to send verification email" });
+    }
+
     const token = jwt.sign(
       { email: existingUser.email, id: existingUser._id },
       process.env.JSON_WEB_TOKEN_SECRET_KEY
     );
 
-    // Send success response
     return res.status(200).json({
       success: true,
-      message: "OTP SEND",
-      token: token, // Optional: include this if needed for verification
+      message: "OTP sent successfully",
+      token: token,
     });
   } catch (error) {
-    console.log(error);
-    res.json({ status: "FAILED", msg: "something went wrong" });
-    return;
+    console.error("Error in emailVerify:", error);
+    return res.status(500).json({ success: false, message: "Server error" });
   }
 });
 
 const sendEmailFun = async (to, subject, text, html) => {
   const result = await sendEmail(to, subject, text, html);
-  if (result.success) {
-    return true;
-    //res.status(200).json({ message: 'Email sent successfully', messageId: result.messageId });
-  } else {
-    return false;
-    // res.status(500).json({ message: 'Failed to send email', error: result.error });
-  }
+  return result.success;
 };
 
 router.post("/verifyemail", async (req, res) => {
@@ -243,9 +233,7 @@ router.post("/verifyemail", async (req, res) => {
 
     const user = await User.findOne({ email });
     if (!user) {
-      return res
-        .status(400)
-        .json({ success: false, message: "User not found" });
+      return res.status(400).json({ success: false, message: "User not found" });
     }
 
     const isCodeValid = user.otp === otp;
@@ -256,19 +244,15 @@ router.post("/verifyemail", async (req, res) => {
       user.otp = null;
       user.otpExpires = null;
       await user.save();
-      return res
-        .status(200)
-        .json({ success: true, message: "OTP verified successfully" });
+      return res.status(200).json({ success: true, message: "OTP verified successfully" });
     } else if (!isCodeValid) {
       return res.status(400).json({ success: false, message: "Invalid OTP" });
     } else {
       return res.status(400).json({ success: false, message: "OTP expired" });
     }
   } catch (err) {
-    console.log("Error in verifyEmail", err);
-    res
-      .status(500)
-      .json({ success: false, message: "Error in verifying email" });
+    console.error("Error in verifyEmail:", err);
+    return res.status(500).json({ success: false, message: "Error in verifying email" });
   }
 });
 
@@ -278,23 +262,20 @@ router.post(`/signin`, async (req, res) => {
   try {
     const existingUser = await User.findOne({ email: email });
     if (!existingUser) {
-      res.status(404).json({ error: true, msg: "User not found!" });
-      return;
+      return res.status(404).json({ success: false, message: "User not found" });
     }
 
-    if (existingUser.isVerified === false) {
-      res.json({
-        error: true,
+    if (!existingUser.isVerified) {
+      return res.status(403).json({
+        success: false,
         isVerify: false,
-        msg: "Your account is not active yet please verify your account first or Sign Up with a new user",
+        message: "Your account is not verified. Please verify your account first or sign up with a new user",
       });
-      return;
     }
 
     const matchPassword = await bcrypt.compare(password, existingUser.password);
-
     if (!matchPassword) {
-      return res.status(400).json({ error: true, msg: "Invailid credentials" });
+      return res.status(400).json({ success: false, message: "Invalid credentials" });
     }
 
     const token = jwt.sign(
@@ -302,39 +283,32 @@ router.post(`/signin`, async (req, res) => {
       process.env.JSON_WEB_TOKEN_SECRET_KEY
     );
 
-    return res.status(200).send({
+    return res.status(200).json({
       user: existingUser,
       token: token,
-      msg: "User Authenticated",
+      message: "User authenticated successfully",
     });
   } catch (error) {
-    res.status(500).json({ error: true, msg: "something went wrong" });
-    return;
+    console.error("Error in signin:", error);
+    return res.status(500).json({ success: false, message: "Server error" });
   }
 });
 
 router.put(`/changePassword/:id`, async (req, res) => {
   const { name, phone, email, password, newPass, images } = req.body;
 
-  // console.log(req.body)
-
-  const existingUser = await User.findOne({ email: email });
-  if (!existingUser) {
-    res.status(404).json({ error: true, msg: "User not found!" });
-  }
-
-  const matchPassword = await bcrypt.compare(password, existingUser.password);
-
-  if (!matchPassword) {
-    res.status(404).json({ error: true, msg: "current password wrong" });
-  } else {
-    let newPassword;
-
-    if (newPass) {
-      newPassword = bcrypt.hashSync(newPass, 10);
-    } else {
-      newPassword = existingUser.passwordHash;
+  try {
+    const existingUser = await User.findOne({ email: email });
+    if (!existingUser) {
+      return res.status(404).json({ success: false, message: "User not found" });
     }
+
+    const matchPassword = await bcrypt.compare(password, existingUser.password);
+    if (!matchPassword) {
+      return res.status(400).json({ success: false, message: "Current password is incorrect" });
+    }
+
+    const newPassword = newPass ? await bcrypt.hash(newPass, 10) : existingUser.password;
 
     const user = await User.findByIdAndUpdate(
       req.params.id,
@@ -348,63 +322,61 @@ router.put(`/changePassword/:id`, async (req, res) => {
       { new: true }
     );
 
-    if (!user)
-      return res
-        .status(400)
-        .json({ error: true, msg: "The user cannot be Updated!" });
+    if (!user) {
+      return res.status(400).json({ success: false, message: "User cannot be updated" });
+    }
 
-    res.send(user);
+    return res.status(200).json(user);
+  } catch (error) {
+    console.error("Error in changePassword:", error);
+    return res.status(500).json({ success: false, message: "Server error" });
   }
 });
 
 router.get(`/`, async (req, res) => {
-  const userList = await User.find();
-
-  if (!userList) {
-    res.status(500).json({ success: false });
+  try {
+    const userList = await User.find();
+    return res.status(200).json(userList);
+  } catch (error) {
+    console.error("Error in get users:", error);
+    return res.status(500).json({ success: false, message: "Server error" });
   }
-  res.send(userList);
 });
 
 router.get("/:id", async (req, res) => {
-  const user = await User.findById(req.params.id);
-
-  if (!user) {
-    res
-      .status(500)
-      .json({ message: "The user with the given ID was not found." });
-  } else {
-    res.status(200).send(user);
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+    return res.status(200).json(user);
+  } catch (error) {
+    console.error("Error in get user by ID:", error);
+    return res.status(500).json({ success: false, message: "Server error" });
   }
 });
 
-router.delete("/:id", (req, res) => {
-  User.findByIdAndDelete(req.params.id)
-    .then((user) => {
-      if (user) {
-        return res
-          .status(200)
-          .json({ success: true, message: "the user is deleted!" });
-      } else {
-        return res
-          .status(404)
-          .json({ success: false, message: "user not found!" });
-      }
-    })
-    .catch((err) => {
-      return res.status(500).json({ success: false, error: err });
-    });
+router.delete("/:id", async (req, res) => {
+  try {
+    const user = await User.findByIdAndDelete(req.params.id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+    return res.status(200).json({ success: true, message: "User deleted successfully" });
+  } catch (error) {
+    console.error("Error in delete user:", error);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
 });
 
 router.get(`/get/count`, async (req, res) => {
-  const userCount = await User.countDocuments();
-
-  if (!userCount) {
-    res.status(500).json({ success: false });
+  try {
+    const userCount = await User.countDocuments();
+    return res.status(200).json({ userCount });
+  } catch (error) {
+    console.error("Error in get user count:", error);
+    return res.status(500).json({ success: false, message: "Server error" });
   }
-  res.send({
-    userCount: userCount,
-  });
 });
 
 router.post(`/authWithGoogle`, async (req, res) => {
@@ -412,15 +384,14 @@ router.post(`/authWithGoogle`, async (req, res) => {
 
   try {
     const existingUser = await User.findOne({ email: email });
-
     if (!existingUser) {
       const result = await User.create({
-        name: name,
-        phone: phone,
-        email: email,
-        password: password,
-        images: images,
-        isAdmin: isAdmin,
+        name,
+        phone,
+        email,
+        password,
+        images,
+        isAdmin,
         isVerified: true,
       });
 
@@ -429,76 +400,77 @@ router.post(`/authWithGoogle`, async (req, res) => {
         process.env.JSON_WEB_TOKEN_SECRET_KEY
       );
 
-      return res.status(200).send({
+      return res.status(200).json({
         user: result,
         token: token,
-        msg: "User Login Successfully!",
+        message: "User login successfully",
       });
     } else {
-      const existingUser = await User.findOne({ email: email });
       const token = jwt.sign(
         { email: existingUser.email, id: existingUser._id },
         process.env.JSON_WEB_TOKEN_SECRET_KEY
       );
 
-      return res.status(200).send({
+      return res.status(200).json({
         user: existingUser,
         token: token,
-        msg: "User Login Successfully!",
+        message: "User login successfully",
       });
     }
   } catch (error) {
-    console.log(error);
+    console.error("Error in authWithGoogle:", error);
+    return res.status(500).json({ success: false, message: "Server error" });
   }
 });
 
 router.put("/:id", async (req, res) => {
   const { name, phone, email } = req.body;
 
-  const userExist = await User.findById(req.params.id);
+  try {
+    const userExist = await User.findById(req.params.id);
+    if (!userExist) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
 
-  if (req.body.password) {
-    newPassword = bcrypt.hashSync(req.body.password, 10);
-  } else {
-    newPassword = userExist.passwordHash;
+    const newPassword = req.body.password
+      ? await bcrypt.hash(req.body.password, 10)
+      : userExist.password;
+
+    const user = await User.findByIdAndUpdate(
+      req.params.id,
+      {
+        name,
+        phone,
+        email,
+        password: newPassword,
+        images: imagesArr,
+      },
+      { new: true }
+    );
+
+    if (!user) {
+      return res.status(400).json({ success: false, message: "User cannot be updated" });
+    }
+
+    return res.status(200).json(user);
+  } catch (error) {
+    console.error("Error in update user:", error);
+    return res.status(500).json({ success: false, message: "Server error" });
   }
-
-  const user = await User.findByIdAndUpdate(
-    req.params.id,
-    {
-      name: name,
-      phone: phone,
-      email: email,
-      password: newPassword,
-      images: imagesArr,
-    },
-    { new: true }
-  );
-
-  if (!user) return res.status(400).send("the user cannot be Updated!");
-
-  res.send(user);
 });
 
 router.delete("/deleteImage", async (req, res) => {
-  const imgUrl = req.query.img;
+  try {
+    const imgUrl = req.query.img;
+    const urlArr = imgUrl.split("/");
+    const image = urlArr[urlArr.length - 1];
+    const imageName = image.split(".")[0];
 
-  // console.log(imgUrl)
-
-  const urlArr = imgUrl.split("/");
-  const image = urlArr[urlArr.length - 1];
-
-  const imageName = image.split(".")[0];
-
-  const response = await cloudinary.uploader.destroy(
-    imageName,
-    (error, result) => {
-      // console.log(error, res)
-    }
-  );
-
-  if (response) {
-    res.status(200).send(response);
+    const response = await cloudinary.uploader.destroy(imageName);
+    return res.status(200).json(response);
+  } catch (error) {
+    console.error("Error in deleteImage:", error);
+    return res.status(500).json({ success: false, message: "Server error" });
   }
 });
 
@@ -506,71 +478,59 @@ router.post(`/forgotPassword`, async (req, res) => {
   const { email } = req.body;
 
   try {
-    // Generate verification code
     const verifyCode = Math.floor(100000 + Math.random() * 900000).toString();
-
-    // If the user exists but is not verified, update the existing user
-
     const existingUser = await User.findOne({ email: email });
 
     if (!existingUser) {
-      res.json({ status: "FAILED", msg: "User not exist with this email!" });
-      return;
+      return res.status(404).json({ success: false, message: "User not found" });
     }
 
-    if (existingUser) {
-      existingUser.otp = verifyCode;
-      existingUser.otpExpires = Date.now() + 600000; // 10 minutes
-      await existingUser.save();
-    }
+    existingUser.otp = verifyCode;
+    existingUser.otpExpires = Date.now() + 600000; // 10 minutes
+    await existingUser.save();
 
-    // Send verification email
-    const resp = sendEmailFun(
+    const emailSent = await sendEmailFun(
       email,
       "Verify Email",
       "",
       "Your OTP is " + verifyCode
     );
 
-    // Send success response
+    if (!emailSent) {
+      return res.status(500).json({ success: false, message: "Failed to send OTP email" });
+    }
+
     return res.status(200).json({
       success: true,
-      status: "SUCCESS",
-      message: "OTP Send",
+      message: "OTP sent successfully",
     });
   } catch (error) {
-    console.log(error);
-    res.json({ status: "FAILED", msg: "something went wrong" });
-    return;
+    console.error("Error in forgotPassword:", error);
+    return res.status(500).json({ success: false, message: "Server error" });
   }
 });
 
-
 router.post(`/forgotPassword/changePassword`, async (req, res) => {
-    const { email, newPass } = req.body;
-  
-    try {
-  
-      const existingUser = await User.findOne({ email: email });
-  
-      if (existingUser) {
-        const hashPassword = await bcrypt.hash(newPass, 10);
-        existingUser.password = hashPassword;
-        await existingUser.save();
-      }
-     
+  const { email, newPass } = req.body;
 
-      // Send success response
-      return res.status(200).json({
-        success: true,
-        status:"SUCCESS",
-        message: "Password change successfully",
-      });
-    } catch (error) {
-      console.log(error);
-      res.json({ status: "FAILED", msg: "something went wrong" });
-      return;
+  try {
+    const existingUser = await User.findOne({ email: email });
+    if (!existingUser) {
+      return res.status(404).json({ success: false, message: "User not found" });
     }
-  });
+
+    const hashPassword = await bcrypt.hash(newPass, 10);
+    existingUser.password = hashPassword;
+    await existingUser.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Password changed successfully",
+    });
+  } catch (error) {
+    console.error("Error in forgotPassword/changePassword:", error);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+});
 
 module.exports = router;
