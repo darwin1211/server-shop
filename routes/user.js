@@ -1,17 +1,13 @@
-// server-shop/routes/user.js
 const express = require("express");
 const router  = express.Router();
 
-// point at your model’s lowercase filename
 const User    = require("../models/user");
-
-const bcrypt  = require("bcrypt");               // you have bcrypt in package.json
+const bcrypt  = require("bcrypt");
 const jwt     = require("jsonwebtoken");
 
-// fix path to your email util
 const { sendEmail } = require("../utils/emailService");
 
-// helper to make a 6‑digit OTP
+// Helper to generate 6-digit OTP
 const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
 
 // ─── SIGNUP ──────────────────────────────────────────────────
@@ -53,7 +49,7 @@ router.post("/signup", async (req, res) => {
     res.status(200).json({
       success: true,
       message: "OTP sent",
-      otp,           // you can remove this in production
+      otp,           // remove this before production
       userId: user._id
     });
   } catch (err) {
@@ -105,7 +101,7 @@ router.post("/verifyAccount/resendOtp", async (req, res) => {
   }
 });
 
-// ─── VERIFY OTP ──────────────────────────────────────────────
+// ─── VERIFY OTP AND LOGIN ──────────────────────────────────────
 router.post("/verifyemail", async (req, res) => {
   const { userId, otp } = req.body;
   if (!userId || !otp) {
@@ -125,12 +121,34 @@ router.post("/verifyemail", async (req, res) => {
       });
     }
 
+    // Mark user as verified
     user.isVerified  = true;
     user.otp         = null;
     user.otpExpires  = null;
     await user.save();
 
-    res.status(200).json({ success:true, message:"Account verified" });
+    // Create JWT token
+    const token = jwt.sign({ id: user._id }, process.env.JSON_WEB_TOKEN_SECRET_KEY, {
+      expiresIn: "7d",
+    });
+
+    // Prepare user data to send (exclude sensitive info)
+    const userData = {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      isAdmin: user.isAdmin,
+      isVerified: user.isVerified,
+      images: user.images || [],
+    };
+
+    res.status(200).json({
+      success: true,
+      message: "Account verified and logged in",
+      token,
+      user: userData,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({
